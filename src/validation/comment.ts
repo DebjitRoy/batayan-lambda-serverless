@@ -8,3 +8,7 @@ export const createCommentSchema = z.object({
 });
 
 export const updateCommentSchema = createCommentSchema.partial();
+
+export const replyCommentSchema = z.object({
+  reply: z.string().trim().min(1).max(500)
+});

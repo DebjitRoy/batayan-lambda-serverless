@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loginSchema, registerSchema } from "../src/validation/auth.js";
-import { createCommentSchema } from "../src/validation/comment.js";
+import { createCommentSchema, replyCommentSchema } from "../src/validation/comment.js";
 import { createPostSchema, updatePostSchema } from "../src/validation/post.js";
 import { uploadImageSchema } from "../src/validation/upload.js";
 
@@ -26,7 +26,10 @@ describe("request validation", () => {
 
   it("enforces comment limits", () => {
     expect(createCommentSchema.parse({ username: "A", title: "T", description: "D" }).reply).toBe("");
+    expect(replyCommentSchema.parse({ reply: "Thanks for reading." }).reply).toBe("Thanks for reading.");
     expect(() => createCommentSchema.parse({ username: "A", title: "T", description: "x".repeat(501) })).toThrow();
+    expect(() => replyCommentSchema.parse({ reply: "" })).toThrow();
+    expect(() => replyCommentSchema.parse({ reply: "x".repeat(501) })).toThrow();
   });
 
   it("allows only image upload content types", () => {

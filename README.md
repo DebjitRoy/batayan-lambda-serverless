@@ -145,6 +145,7 @@ If `dataBase64` is omitted, the endpoint returns a short-lived `uploadUrl` and t
 - `GET /api/posts/{postId}/comments/{commentId}`
 - `POST /api/posts/{postId}/comments`
 - `PUT /api/posts/{postId}/comments/{commentId}`
+- `PUT /api/posts/{postId}/comments/{commentId}/reply`
 - `DELETE /api/posts/{postId}/comments/{commentId}`
 
 Create comment body:
@@ -155,6 +156,14 @@ Create comment body:
   "title": "Loved this",
   "description": "Thanks for the thoughtful post.",
   "reply": ""
+}
+```
+
+Reply to comment body, admin bearer token required:
+
+```json
+{
+  "reply": "Thanks for reading."
 }
 ```
 ## deployed API url
@@ -174,6 +183,7 @@ https://us-east-1.console.aws.amazon.com/apigateway/main/develop/routes?api=tch4
   GET - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments/{commentId}
   POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments
   PUT - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments/{commentId}
+  PUT - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments/{commentId}/reply
   DELETE - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments/{commentId}
 functions:
   authRegister: batayan-serverless-dev-authRegister (10 MB)
@@ -189,4 +199,5 @@ functions:
   getComment: batayan-serverless-dev-getComment (10 MB)
   createComment: batayan-serverless-dev-createComment (10 MB)
   updateComment: batayan-serverless-dev-updateComment (10 MB)
+  replyComment: batayan-serverless-dev-replyComment (10 MB)
   deleteComment: batayan-serverless-dev-deleteComment (10 MB)

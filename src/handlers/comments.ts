@@ -4,7 +4,8 @@ import { CommentModel } from "../models/comment.js";
 import { PostModel } from "../models/post.js";
 import { assertObjectId } from "../utils/ids.js";
 import { handle, HttpError, json, parseJsonBody, pathParam } from "../utils/http.js";
-import { createCommentSchema, updateCommentSchema } from "../validation/comment.js";
+import { createCommentSchema, replyCommentSchema, updateCommentSchema } from "../validation/comment.js";
+import { requireAuth } from "../utils/auth.js";
 
 async function ensurePost(postId: string): Promise<void> {
   const exists = await PostModel.exists({ _id: postId });
@@ -61,6 +62,27 @@ export async function update(event: APIGatewayProxyEventV2): Promise<APIGatewayP
       new: true,
       runValidators: true
     }).lean();
+
+    if (!comment) {
+      throw new HttpError(404, "Comment not found.");
+    }
+
+    return json(200, comment);
+  });
+}
+
+export async function reply(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  return handle(async () => {
+    requireAuth(event);
+    await connectToDatabase();
+    const postId = assertObjectId(pathParam(event, "postId"), "postId");
+    const commentId = assertObjectId(pathParam(event, "commentId"), "commentId");
+    const body = parseJsonBody(event, replyCommentSchema);
+    const comment = await CommentModel.findOneAndUpdate(
+      { _id: commentId, post: postId },
+      { reply: body.reply },
+      { new: true, runValidators: true }
+    ).lean();
 
     if (!comment) {
       throw new HttpError(404, "Comment not found.");

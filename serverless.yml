@@ -120,6 +120,12 @@ functions:
       - httpApi:
           method: PUT
           path: /api/posts/{postId}/comments/{commentId}
+  replyComment:
+    handler: src/handlers/comments.reply
+    events:
+      - httpApi:
+          method: PUT
+          path: /api/posts/{postId}/comments/{commentId}/reply
   deleteComment:
     handler: src/handlers/comments.remove
     events:
