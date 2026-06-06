@@ -1,0 +1,128 @@
+service: batayan-serverless
+frameworkVersion: "4"
+
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: ${env:AWS_REGION, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  httpApi:
+    cors: true
+  environment:
+    MONGODB_URI: ${env:MONGODB_URI, ''}
+    JWT_SECRET: ${env:JWT_SECRET, ''}
+    S3_BUCKET: ${env:S3_BUCKET, 'batayan-blog-images-${sls:stage}'}
+    S3_PUBLIC_BASE_URL: ${env:S3_PUBLIC_BASE_URL, ''}
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:PutObjectAcl
+          Resource:
+            - arn:aws:s3:::${env:S3_BUCKET, 'batayan-blog-images-${sls:stage}'}/*
+
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node22
+    platform: node
+    format: cjs
+
+custom:
+  serverless-offline:
+    httpPort: 4000
+    lambdaPort: 4002
+
+functions:
+  authRegister:
+    handler: src/handlers/auth.register
+    events:
+      - httpApi:
+          method: POST
+          path: /api/auth/register
+  authLogin:
+    handler: src/handlers/auth.login
+    events:
+      - httpApi:
+          method: POST
+          path: /api/auth/login
+  listPosts:
+    handler: src/handlers/posts.list
+    events:
+      - httpApi:
+          method: GET
+          path: /api/posts
+  getPost:
+    handler: src/handlers/posts.get
+    events:
+      - httpApi:
+          method: GET
+          path: /api/posts/{postId}
+  createPost:
+    handler: src/handlers/posts.create
+    events:
+      - httpApi:
+          method: POST
+          path: /api/posts
+  updatePost:
+    handler: src/handlers/posts.update
+    events:
+      - httpApi:
+          method: PUT
+          path: /api/posts/{postId}
+  deletePost:
+    handler: src/handlers/posts.remove
+    events:
+      - httpApi:
+          method: DELETE
+          path: /api/posts/{postId}
+  uploadPostHero:
+    handler: src/handlers/uploads.hero
+    events:
+      - httpApi:
+          method: PUT
+          path: /api/posts/{postId}/upload
+  uploadPostSection:
+    handler: src/handlers/uploads.section
+    events:
+      - httpApi:
+          method: PUT
+          path: /api/posts/{postId}/sectionupload/{sectionId}
+  listComments:
+    handler: src/handlers/comments.list
+    events:
+      - httpApi:
+          method: GET
+          path: /api/posts/{postId}/comments
+  getComment:
+    handler: src/handlers/comments.get
+    events:
+      - httpApi:
+          method: GET
+          path: /api/posts/{postId}/comments/{commentId}
+  createComment:
+    handler: src/handlers/comments.create
+    events:
+      - httpApi:
+          method: POST
+          path: /api/posts/{postId}/comments
+  updateComment:
+    handler: src/handlers/comments.update
+    events:
+      - httpApi:
+          method: PUT
+          path: /api/posts/{postId}/comments/{commentId}
+  deleteComment:
+    handler: src/handlers/comments.remove
+    events:
+      - httpApi:
+          method: DELETE
+          path: /api/posts/{postId}/comments/{commentId}

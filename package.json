@@ -1,0 +1,36 @@
+{
+  "name": "batayan-serverless",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Serverless AWS Lambda APIs for the Batayan Blog application.",
+  "scripts": {
+    "build": "serverless package",
+    "dev": "serverless offline",
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1061.0",
+    "@aws-sdk/s3-request-presigner": "3.1061.0",
+    "bcryptjs": "3.0.3",
+    "jsonwebtoken": "9.0.3",
+    "mongoose": "9.6.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "8.10.161",
+    "@types/jsonwebtoken": "9.0.10",
+    "@types/node": "24.10.1",
+    "esbuild": "0.28.0",
+    "serverless": "4.37.0",
+    "serverless-offline": "14.7.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
