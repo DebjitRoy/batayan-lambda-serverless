@@ -104,6 +104,7 @@ Login body:
 List posts supports:
 
 - `search`
+- `expanded`: `true` includes all posts, including parts 2+ of a series. By default, series are collapsed and only part 1 is returned with hydrated series name/id.
 - `sortBy`: `createdAt`, `title`, `visited`, `liked`
 - `sortOrder`: `asc` or `desc`
 - `page`
@@ -122,8 +123,35 @@ Create post body:
       "content": "Walked through the old streets."
     }
   ],
+  "series": {
+    "seriesId": "507f1f77bcf86cd799439011",
+    "part": 1
+  },
   "searchBy": ["kolkata", "travel"],
   "additionalInfo": ""
+}
+```
+
+Post responses hydrate the normalized series reference:
+
+```json
+{
+  "_id": "post-id",
+  "title": "A day in Kolkata",
+  "isSeries": true,
+  "series": {
+    "seriesId": "507f1f77bcf86cd799439011",
+    "title": "Kolkata Travel Notes",
+    "part": 1,
+    "totalParts": 5,
+    "posts": [
+      {
+        "postId": "post-id",
+        "title": "A day in Kolkata",
+        "part": 1
+      }
+    ]
+  }
 }
 ```
 
@@ -138,6 +166,44 @@ Upload image body:
 ```
 
 If `dataBase64` is omitted, the endpoint returns a short-lived `uploadUrl` and the final public `imageUrl`.
+
+### Series
+
+- `GET /api/series`
+- `GET /api/series/{seriesId}`
+- `POST /api/series`
+- `PUT /api/series/{seriesId}`
+- `DELETE /api/series/{seriesId}`
+
+List series supports:
+
+- `search`
+- `sortBy`: `createdAt`, `title`
+- `sortOrder`: `asc` or `desc`
+- `page`
+- `limit`
+
+Create series body:
+
+```json
+{
+  "title": "Kolkata Travel Notes",
+  "description": "A five part travel journal.",
+  "postType": "travel",
+  "searchBy": ["kolkata", "travel"]
+}
+```
+
+When creating or editing a post, attach it to a series with:
+
+```json
+{
+  "series": {
+    "seriesId": "507f1f77bcf86cd799439011",
+    "part": 3
+  }
+}
+```
 
 ### Comments
 
@@ -172,6 +238,11 @@ https://us-east-1.console.aws.amazon.com/apigateway/main/develop/routes?api=tch4
  
   POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/auth/register
   POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/auth/login
+  GET - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/series
+  GET - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/series/{seriesId}
+  POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/series
+  PUT - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/series/{seriesId}
+  DELETE - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/series/{seriesId}
   GET - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts
   GET - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}
   POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts
@@ -188,6 +259,11 @@ https://us-east-1.console.aws.amazon.com/apigateway/main/develop/routes?api=tch4
 functions:
   authRegister: batayan-serverless-dev-authRegister (10 MB)
   authLogin: batayan-serverless-dev-authLogin (10 MB)
+  listSeries: batayan-serverless-dev-listSeries (10 MB)
+  getSeries: batayan-serverless-dev-getSeries (10 MB)
+  createSeries: batayan-serverless-dev-createSeries (10 MB)
+  updateSeries: batayan-serverless-dev-updateSeries (10 MB)
+  deleteSeries: batayan-serverless-dev-deleteSeries (10 MB)
   listPosts: batayan-serverless-dev-listPosts (10 MB)
   getPost: batayan-serverless-dev-getPost (10 MB)
   createPost: batayan-serverless-dev-createPost (10 MB)

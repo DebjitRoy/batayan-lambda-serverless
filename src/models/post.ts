@@ -12,6 +12,14 @@ const sectionSchema = new Schema(
   { _id: true, versionKey: false }
 );
 
+const seriesSchema = new Schema(
+  {
+    seriesId: { type: String, required: true, trim: true },
+    part: { type: Number, required: true, min: 1 }
+  },
+  { _id: false, versionKey: false }
+);
+
 const postSchema = new Schema(
   {
     title: { type: String, required: true, maxlength: 100, trim: true },
@@ -23,6 +31,7 @@ const postSchema = new Schema(
     photoHero: { type: String, default: "no-photo.jpg" },
     gallery: { type: [String], default: [] },
     content: { type: [sectionSchema], default: [] },
+    series: { type: seriesSchema, default: undefined },
     searchBy: { type: [String], default: [] },
     additionalInfo: { type: String, default: "" }
   },
@@ -31,6 +40,7 @@ const postSchema = new Schema(
 
 postSchema.index({ title: "text", gist: "text", searchBy: "text", additionalInfo: "text" });
 postSchema.index({ createdAt: -1 });
+postSchema.index({ "series.seriesId": 1, "series.part": 1 });
 
 export type PostDocument = InferSchemaType<typeof postSchema>;
 

@@ -11,6 +11,11 @@ export const sectionSchema = z.object({
   videoDescription: z.string().trim().max(100).default("")
 });
 
+export const postSeriesSchema = z.object({
+  seriesId: z.string().trim().min(1),
+  part: z.number().int().min(1)
+});
+
 export const createPostSchema = z.object({
   title: z.string().trim().min(1).max(100),
   postType: postTypeSchema,
@@ -20,6 +25,7 @@ export const createPostSchema = z.object({
   photoHero: z.string().default("no-photo.jpg"),
   gallery: z.array(z.string()).default([]),
   content: z.array(sectionSchema).default([]),
+  series: postSeriesSchema.optional(),
   searchBy: z.array(z.string().trim().min(1)).default([]),
   additionalInfo: z.string().default("")
 });

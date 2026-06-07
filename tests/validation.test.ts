@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { loginSchema, registerSchema } from "../src/validation/auth.js";
 import { createCommentSchema, replyCommentSchema } from "../src/validation/comment.js";
 import { createPostSchema, updatePostSchema } from "../src/validation/post.js";
+import { createSeriesSchema, updateSeriesSchema } from "../src/validation/series.js";
 import { uploadImageSchema } from "../src/validation/upload.js";
 
 describe("request validation", () => {
@@ -22,6 +23,43 @@ describe("request validation", () => {
     expect(updatePostSchema.parse({ gist: "updated" }).gist).toBe("updated");
     expect(() => createPostSchema.parse({ title: "x".repeat(101), postType: "travel" })).toThrow();
     expect(() => createPostSchema.parse({ title: "Post", postType: "food" })).toThrow();
+  });
+
+  it("validates optional post series metadata", () => {
+    const post = createPostSchema.parse({
+      title: "Part three",
+      postType: "books",
+      series: {
+        seriesId: "507f1f77bcf86cd799439011",
+        part: 3
+      }
+    });
+
+    expect(post.series?.part).toBe(3);
+    expect(() =>
+      createPostSchema.parse({
+        title: "Bad series",
+        postType: "books",
+        series: {
+          seriesId: "",
+          part: 1
+        }
+      })
+    ).toThrow();
+  });
+
+  it("validates searchable series metadata", () => {
+    const series = createSeriesSchema.parse({
+      title: "Kolkata Travel Notes",
+      postType: "travel",
+      searchBy: ["kolkata", "travel"]
+    });
+
+    expect(series.description).toBe("");
+    expect(series.searchBy).toEqual(["kolkata", "travel"]);
+    expect(updateSeriesSchema.parse({ title: "Updated" }).title).toBe("Updated");
+    expect(() => createSeriesSchema.parse({ title: "", postType: "travel" })).toThrow();
+    expect(() => createSeriesSchema.parse({ title: "Bad", postType: "food" })).toThrow();
   });
 
   it("enforces comment limits", () => {

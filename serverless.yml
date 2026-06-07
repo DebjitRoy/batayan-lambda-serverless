@@ -54,6 +54,36 @@ functions:
       - httpApi:
           method: POST
           path: /api/auth/login
+  listSeries:
+    handler: src/handlers/series.list
+    events:
+      - httpApi:
+          method: GET
+          path: /api/series
+  getSeries:
+    handler: src/handlers/series.get
+    events:
+      - httpApi:
+          method: GET
+          path: /api/series/{seriesId}
+  createSeries:
+    handler: src/handlers/series.create
+    events:
+      - httpApi:
+          method: POST
+          path: /api/series
+  updateSeries:
+    handler: src/handlers/series.update
+    events:
+      - httpApi:
+          method: PUT
+          path: /api/series/{seriesId}
+  deleteSeries:
+    handler: src/handlers/series.remove
+    events:
+      - httpApi:
+          method: DELETE
+          path: /api/series/{seriesId}
   listPosts:
     handler: src/handlers/posts.list
     events:
