@@ -91,6 +91,21 @@ Login body:
 }
 ```
 
+Register / login response:
+
+```json
+{
+  "user": {
+    "id": "user-id",
+    "name": "Admin",
+    "email": "admin@example.com",
+    "role": "admin",
+    "createdAt": "2026-06-07T00:00:00.000Z"
+  },
+  "token": "<jwt-token>"
+}
+```
+
 ### Posts
 
 - `GET /api/posts`
@@ -101,44 +116,79 @@ Login body:
 - `PUT /api/posts/{postId}/upload`
 - `PUT /api/posts/{postId}/sectionupload/{sectionId}`
 
-List posts supports:
+Protected endpoints require:
 
-- `search`
-- `expanded`: `true` includes all posts, including parts 2+ of a series. By default, series are collapsed and only part 1 is returned with hydrated series name/id.
-- `sortBy`: `createdAt`, `title`, `visited`, `liked`
-- `sortOrder`: `asc` or `desc`
-- `page`
-- `limit`
+```text
+Authorization: Bearer <token>
+```
 
-Create post body:
+#### List posts
+
+Query parameters:
+
+- `search` (string)
+- `expanded` (`true` or `false`)
+- `sortBy` (`createdAt`, `title`, `visited`, `liked`)
+- `sortOrder` (`asc` or `desc`)
+- `page` (number)
+- `limit` (number)
+
+Response:
 
 ```json
 {
-  "title": "A day in Kolkata",
-  "postType": "travel",
-  "gist": "A short summary",
-  "content": [
+  "items": [
     {
-      "header": "Morning",
-      "content": "Walked through the old streets."
+      "_id": "post-id",
+      "title": "A day in Kolkata",
+      "postType": "travel",
+      "gist": "A short summary",
+      "createdAt": "2026-06-07T00:00:00.000Z",
+      "visited": 0,
+      "liked": 0,
+      "photoHero": "no-photo.jpg",
+      "gallery": [],
+      "content": [],
+      "series": null,
+      "searchBy": ["kolkata", "travel"],
+      "additionalInfo": "",
+      "isSeries": false
     }
   ],
-  "series": {
-    "seriesId": "507f1f77bcf86cd799439011",
-    "part": 1
-  },
-  "searchBy": ["kolkata", "travel"],
-  "additionalInfo": ""
+  "page": 1,
+  "limit": 10,
+  "total": 1,
+  "totalPages": 1,
+  "expanded": false
 }
 ```
 
-Post responses hydrate the normalized series reference:
+#### Get post
+
+Response includes hydrated series data when the post belongs to a series.
 
 ```json
 {
   "_id": "post-id",
   "title": "A day in Kolkata",
-  "isSeries": true,
+  "postType": "travel",
+  "gist": "A short summary",
+  "createdAt": "2026-06-07T00:00:00.000Z",
+  "visited": 1,
+  "liked": 0,
+  "photoHero": "https://.../image.jpg",
+  "gallery": [],
+  "content": [
+    {
+      "_id": "section-id",
+      "header": "Morning",
+      "content": "Walked through the old streets.",
+      "image": "",
+      "imgDescription": "",
+      "video": "",
+      "videoDescription": ""
+    }
+  ],
   "series": {
     "seriesId": "507f1f77bcf86cd799439011",
     "title": "Kolkata Travel Notes",
@@ -151,11 +201,50 @@ Post responses hydrate the normalized series reference:
         "part": 1
       }
     ]
-  }
+  },
+  "searchBy": ["kolkata", "travel"],
+  "additionalInfo": ""
 }
 ```
 
-Upload image body:
+#### Create post body
+
+```json
+{
+  "title": "A day in Kolkata",
+  "postType": "travel",
+  "gist": "A short summary",
+  "content": [
+    {
+      "header": "Morning",
+      "content": "Walked through the old streets.",
+      "image": "",
+      "imgDescription": "",
+      "video": "",
+      "videoDescription": ""
+    }
+  ],
+  "series": {
+    "seriesId": "507f1f77bcf86cd799439011",
+    "part": 1
+  },
+  "searchBy": ["kolkata", "travel"],
+  "additionalInfo": ""
+}
+```
+
+Create / update post response: same as get post response above.
+
+#### Delete post response
+
+```json
+{
+  "deleted": true,
+  "id": "post-id"
+}
+```
+
+#### Upload hero image body
 
 ```json
 {
@@ -165,7 +254,32 @@ Upload image body:
 }
 ```
 
-If `dataBase64` is omitted, the endpoint returns a short-lived `uploadUrl` and the final public `imageUrl`.
+#### Upload section image body
+
+```json
+{
+  "fileName": "section.jpg",
+  "contentType": "image/jpeg",
+  "dataBase64": "<base64-image-data>"
+}
+```
+
+If `dataBase64` is omitted, the request returns an upload URL and the expected public image URL.
+
+Upload response:
+
+```json
+{
+  "imageUrl": "https://.../posts/post-id/hero/<uuid>.jpg",
+  "uploadUrl": "https://...",
+  "post": {
+    "_id": "post-id",
+    "title": "A day in Kolkata",
+    "photoHero": "https://.../posts/post-id/hero/<uuid>.jpg",
+    "...": "..."
+  }
+}
+```
 
 ### Series
 
@@ -175,15 +289,15 @@ If `dataBase64` is omitted, the endpoint returns a short-lived `uploadUrl` and t
 - `PUT /api/series/{seriesId}`
 - `DELETE /api/series/{seriesId}`
 
-List series supports:
+Query parameters for list:
 
-- `search`
-- `sortBy`: `createdAt`, `title`
-- `sortOrder`: `asc` or `desc`
-- `page`
-- `limit`
+- `search` (string)
+- `sortBy` (`createdAt`, `title`)
+- `sortOrder` (`asc` or `desc`)
+- `page` (number)
+- `limit` (number)
 
-Create series body:
+Create / update series body:
 
 ```json
 {
@@ -194,14 +308,41 @@ Create series body:
 }
 ```
 
-When creating or editing a post, attach it to a series with:
+List / get series response:
 
 ```json
 {
-  "series": {
-    "seriesId": "507f1f77bcf86cd799439011",
-    "part": 3
-  }
+  "items": [
+    {
+      "_id": "series-id",
+      "title": "Kolkata Travel Notes",
+      "description": "A five part travel journal.",
+      "postType": "travel",
+      "searchBy": ["kolkata", "travel"],
+      "createdAt": "2026-06-07T00:00:00.000Z",
+      "totalParts": 5,
+      "posts": [
+        {
+          "postId": "post-id",
+          "title": "A day in Kolkata",
+          "part": 1
+        }
+      ]
+    }
+  ],
+  "page": 1,
+  "limit": 10,
+  "total": 1,
+  "totalPages": 1
+}
+```
+
+Delete series response:
+
+```json
+{
+  "deleted": true,
+  "id": "series-id"
 }
 ```
 
@@ -225,11 +366,54 @@ Create comment body:
 }
 ```
 
-Reply to comment body, admin bearer token required:
+Reply to comment body:
 
 ```json
 {
   "reply": "Thanks for reading."
+}
+```
+
+Get comments response:
+
+```json
+{
+  "items": [
+    {
+      "_id": "comment-id",
+      "username": "Reader",
+      "title": "Loved this",
+      "description": "Thanks for the thoughtful post.",
+      "createdAt": "2026-06-07T00:00:00.000Z",
+      "reply": "",
+      "post": "post-id"
+    }
+  ]
+}
+```
+
+Get comment response:
+
+```json
+{
+  "_id": "comment-id",
+  "username": "Reader",
+  "title": "Loved this",
+  "description": "Thanks for the thoughtful post.",
+  "createdAt": "2026-06-07T00:00:00.000Z",
+  "reply": "",
+  "post": "post-id"
+}
+```
+
+Update comment response: same as get comment response.
+
+Delete comment response:
+
+```json
+{
+  "deleted": true,
+  "id": "comment-id"
 }
 ```
 ## deployed API url

@@ -18,11 +18,16 @@ type PostResponse = Record<string, unknown> & {
 
 type PostListFilter = Record<string, unknown>;
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function listFilter(search: string | undefined, expanded: boolean): PostListFilter {
   const filters: PostListFilter[] = [];
 
   if (search) {
-    filters.push({ $text: { $search: search } });
+    const regex = new RegExp(escapeRegex(search), "i");
+    filters.push({ searchBy: { $elemMatch: regex } });
   }
 
   if (!expanded) {
