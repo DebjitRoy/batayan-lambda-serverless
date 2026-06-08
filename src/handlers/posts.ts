@@ -27,7 +27,7 @@ function listFilter(search: string | undefined, expanded: boolean): PostListFilt
 
   if (search) {
     const regex = new RegExp(escapeRegex(search), "i");
-    filters.push({ searchBy: { $elemMatch: regex } });
+    filters.push({ searchBy: regex });
   }
 
   if (!expanded) {
