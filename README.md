@@ -56,6 +56,85 @@ Remove the stack:
 npm run remove -- --stage dev
 ```
 
+## CloudFront SPA Routes
+
+Direct browser links such as:
+
+```text
+https://d2ou81s2ipgc0n.cloudfront.net/post/5f942ac89de18f001783af45
+```
+
+must load React's `index.html` first. Otherwise CloudFront asks S3 for `/post/5f942ac89de18f001783af45`, and S3 returns `AccessDenied` because that object does not exist.
+
+This project creates a CloudFront Function in `serverless.yml`:
+
+```text
+batayan-serverless-dev-spa-rewrite
+```
+
+The function rewrites non-API, non-asset browser routes to `/index.html`:
+
+```js
+function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+
+  if (
+    uri === '/' ||
+    uri.startsWith('/api/') ||
+    uri.includes('.')
+  ) {
+    return request;
+  }
+
+  request.uri = '/index.html';
+  return request;
+}
+```
+
+Deploy or update the function:
+
+```bash
+npm run deploy -- --stage dev
+```
+
+Attach it in AWS Console:
+
+```text
+CloudFront -> Distributions -> E1SKIR1J0X07R -> Behaviors
+```
+
+Behavior order should be:
+
+```text
+/api/*  -> API Gateway origin, no SPA rewrite function
+*       -> S3 origin, Viewer request CloudFront Function attached
+```
+
+Edit the default `*` behavior:
+
+```text
+Function associations -> Viewer request
+Function type -> CloudFront Functions
+Function -> batayan-serverless-dev-spa-rewrite
+```
+
+Save the behavior and wait until the distribution status is `Deployed`.
+
+Then invalidate CloudFront:
+
+```bash
+aws cloudfront create-invalidation --distribution-id E1SKIR1J0X07R --paths "/*"
+```
+
+Test:
+
+```text
+https://d2ou81s2ipgc0n.cloudfront.net/post/5f942ac89de18f001783af45
+```
+
+Expected result: CloudFront serves `/index.html`, then React Router renders the post page. API requests such as `/api/posts` are not rewritten.
+
 ## Authentication
 
 Register or log in to receive a bearer token. Post mutations and image uploads require:

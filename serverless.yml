@@ -162,3 +162,35 @@ functions:
       - httpApi:
           method: DELETE
           path: /api/posts/{postId}/comments/{commentId}
+
+resources:
+  Resources:
+    SpaRewriteCloudFrontFunction:
+      Type: AWS::CloudFront::Function
+      Properties:
+        Name: ${self:service}-${sls:stage}-spa-rewrite
+        AutoPublish: true
+        FunctionConfig:
+          Comment: Rewrite SPA browser routes to index.html while leaving API and asset requests alone.
+          Runtime: cloudfront-js-1.0
+        FunctionCode: |
+          function handler(event) {
+            var request = event.request;
+            var uri = request.uri;
+
+            if (
+              uri === '/' ||
+              uri.startsWith('/api/') ||
+              uri.includes('.')
+            ) {
+              return request;
+            }
+
+            request.uri = '/index.html';
+            return request;
+          }
+  Outputs:
+    SpaRewriteCloudFrontFunctionName:
+      Description: CloudFront Function name for SPA route rewrites.
+      Value:
+        Ref: SpaRewriteCloudFrontFunction
