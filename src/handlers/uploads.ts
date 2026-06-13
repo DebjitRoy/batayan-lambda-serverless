@@ -12,8 +12,10 @@ import { uploadImageSchema } from "../validation/upload.js";
 function imageKey(postId: string, fileName: string, sectionId?: string): string {
   const ext = path.extname(fileName).toLowerCase();
   const safeExt = ext && ext.length <= 12 ? ext : "";
-  const folder = sectionId ? `posts/${postId}/sections/${sectionId}` : `posts/${postId}/hero`;
-  return `${folder}/${crypto.randomUUID()}${safeExt}`;
+  if(sectionId) {
+    return `photo_${postId}-${sectionId}${safeExt}`
+  }
+  return `photo_${postId}${safeExt}`
 }
 
 async function storeImage(key: string, contentType: string, dataBase64?: string): Promise<{ imageUrl: string; uploadUrl?: string }> {
@@ -35,7 +37,8 @@ export async function hero(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
     const body = parseJsonBody(event, uploadImageSchema);
     const key = imageKey(postId, body.fileName);
     const result = await storeImage(key, body.contentType, body.dataBase64);
-    const post = await PostModel.findByIdAndUpdate(postId, { photoHero: result.imageUrl }, { new: true }).lean();
+    const fileName = path.basename(key);
+    const post = await PostModel.findByIdAndUpdate(postId, { photoHero: fileName }, { new: true }).lean();
 
     if (!post) {
       throw new HttpError(404, "Post not found.");
@@ -53,10 +56,11 @@ export async function section(event: APIGatewayProxyEventV2): Promise<APIGateway
     const sectionId = assertObjectId(pathParam(event, "sectionId"), "sectionId");
     const body = parseJsonBody(event, uploadImageSchema);
     const key = imageKey(postId, body.fileName, sectionId);
+    const fileName = path.basename(key);
     const result = await storeImage(key, body.contentType, body.dataBase64);
     const post = await PostModel.findOneAndUpdate(
       { _id: postId, "content._id": sectionId },
-      { $set: { "content.$.image": result.imageUrl } },
+      { $set: { "content.$.image": fileName } },
       { new: true }
     ).lean();
 
