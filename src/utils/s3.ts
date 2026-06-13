@@ -24,7 +24,8 @@ export async function uploadObject(key: string, contentType: string, dataBase64:
       Bucket: getEnv().s3Bucket,
       Key: key,
       Body: Buffer.from(dataBase64, "base64"),
-      ContentType: contentType
+      ContentType: contentType,
+      ACL: "public-read"
     })
   );
 
