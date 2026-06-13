@@ -16,6 +16,8 @@ export const postSeriesSchema = z.object({
   part: z.number().int().min(1)
 });
 
+export const postStatusSchema = z.enum(["draft", "published", "archived"]);
+
 export const createPostSchema = z.object({
   title: z.string().trim().min(1).max(100),
   postType: postTypeSchema,
@@ -26,8 +28,11 @@ export const createPostSchema = z.object({
   gallery: z.array(z.string()).default([]),
   content: z.array(sectionSchema).default([]),
   series: postSeriesSchema.optional(),
+  status: postStatusSchema.default("draft"),
   searchBy: z.array(z.string().trim().min(1)).default([]),
   additionalInfo: z.string().default("")
 });
 
 export const updatePostSchema = createPostSchema.partial();
+
+export const updatePostStatusSchema = z.object({ status: postStatusSchema });

@@ -6,7 +6,7 @@ import { SeriesModel } from "../models/series.js";
 import { requireAuth } from "../utils/auth.js";
 import { assertObjectId } from "../utils/ids.js";
 import { handle, HttpError, json, parseJsonBody, pathParam, queryNumber } from "../utils/http.js";
-import { createPostSchema, updatePostSchema } from "../validation/post.js";
+import { createPostSchema, updatePostSchema, updatePostStatusSchema } from "../validation/post.js";
 
 const allowedSort = new Set(["createdAt", "title", "visited", "liked"]);
 
@@ -22,7 +22,7 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function listFilter(search: string | undefined, expanded: boolean): PostListFilter {
+function listFilter(search: string | undefined, expanded: boolean, status?: string): PostListFilter {
   const filters: PostListFilter[] = [];
 
   if (search) {
@@ -39,6 +39,14 @@ function listFilter(search: string | undefined, expanded: boolean): PostListFilt
         { "series.part": 1 }
       ]
     });
+  }
+
+  if (status) {
+    if (status === "published") {
+      filters.push({ $or: [{ status: "published" }, { status: { $exists: false } }] });
+    } else if (status === "draft" || status === "archived") {
+      filters.push({ status });
+    }
   }
 
   if (filters.length === 0) return {};
@@ -132,9 +140,10 @@ export async function list(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
     const limit = queryNumber(event.queryStringParameters?.limit, 10, 1, 50);
     const search = event.queryStringParameters?.search?.trim();
     const expanded = event.queryStringParameters?.expanded === "true";
+    const status = event.queryStringParameters?.status?.trim();
     const sortBy = event.queryStringParameters?.sortBy ?? "createdAt";
     const sortOrder: SortOrder = event.queryStringParameters?.sortOrder === "asc" ? 1 : -1;
-    const filter = listFilter(search, expanded);
+    const filter = listFilter(search, expanded, status);
     const sort: Record<string, SortOrder> = { [allowedSort.has(sortBy) ? sortBy : "createdAt"]: sortOrder };
     const [items, total] = await Promise.all([
       PostModel.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
@@ -188,6 +197,23 @@ export async function update(event: APIGatewayProxyEventV2): Promise<APIGatewayP
     const body = parseJsonBody(event, updatePostSchema);
     await ensureSeriesPart(body.series, postId);
     const post = await PostModel.findByIdAndUpdate(postId, body, { new: true, runValidators: true }).lean();
+
+    if (!post) {
+      throw new HttpError(404, "Post not found.");
+    }
+
+    const [hydratedPost] = await hydrateSeries([post as PostResponse]);
+    return json(200, hydratedPost ?? post);
+  });
+}
+
+export async function updateStatus(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  return handle(async () => {
+    requireAuth(event);
+    await connectToDatabase();
+    const postId = assertObjectId(pathParam(event, "postId"), "postId");
+    const body = parseJsonBody(event, updatePostStatusSchema);
+    const post = await PostModel.findByIdAndUpdate(postId, { status: body.status }, { new: true, runValidators: true }).lean();
 
     if (!post) {
       throw new HttpError(404, "Post not found.");

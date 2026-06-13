@@ -25,6 +25,7 @@ const postSchema = new Schema(
     title: { type: String, required: true, maxlength: 100, trim: true },
     postType: { type: String, required: true, enum: ["travel", "books", "miscl", "guest"] },
     gist: { type: String, maxlength: 1000, default: "" },
+    status: { type: String, enum: ["draft", "published", "archived"], default: "draft" },
     createdAt: { type: Date, default: Date.now },
     visited: { type: Number, default: 0, min: 0 },
     liked: { type: Number, default: 0, min: 0 },

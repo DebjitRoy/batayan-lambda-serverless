@@ -108,6 +108,12 @@ functions:
       - httpApi:
           method: PUT
           path: /api/posts/{postId}
+  updatePostStatus:
+    handler: src/handlers/posts.updateStatus
+    events:
+      - httpApi:
+          method: PUT
+          path: /api/posts/{postId}/status
   deletePost:
     handler: src/handlers/posts.remove
     events:
