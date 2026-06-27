@@ -17,6 +17,7 @@ provider:
     S3_BUCKET: ${env:S3_BUCKET, 'batayan-blog-images-${sls:stage}'}
     S3_PUBLIC_BASE_URL: ${env:S3_PUBLIC_BASE_URL, ''}
     OPENAI_API_KEY: ${env:OPENAI_API_KEY, ''}
+    GRAMMER_CHECK_WORKER_FUNCTION_NAME: ${self:service}-${sls:stage}-grammerCheckWorker
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
   iam:
     role:
@@ -27,6 +28,11 @@ provider:
             - s3:PutObjectAcl
           Resource:
             - arn:aws:s3:::${env:S3_BUCKET, 'batayan-blog-images-${sls:stage}'}/*
+        - Effect: Allow
+          Action:
+            - lambda:InvokeFunction
+          Resource:
+            - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${sls:stage}-grammerCheckWorker
 
 build:
   esbuild:
@@ -175,6 +181,21 @@ functions:
       - httpApi:
           method: POST
           path: /api/summary
+  createGrammerCheck:
+    handler: src/handlers/grammerCheck.createGrammerCheck
+    events:
+      - httpApi:
+          method: POST
+          path: /api/grammer-check
+  getGrammerCheck:
+    handler: src/handlers/grammerCheck.getGrammerCheck
+    events:
+      - httpApi:
+          method: GET
+          path: /api/grammer-check/{jobId}
+  grammerCheckWorker:
+    handler: src/handlers/grammerCheck.processGrammerCheck
+    timeout: 120
 
 resources:
   Resources:

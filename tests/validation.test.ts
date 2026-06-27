@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loginSchema, registerSchema } from "../src/validation/auth.js";
 import { createCommentSchema, replyCommentSchema } from "../src/validation/comment.js";
+import { grammerCheckResponseSchema, grammerCheckSchema } from "../src/validation/grammerCheck.js";
 import { createPostSchema, updatePostSchema } from "../src/validation/post.js";
 import { createSeriesSchema, updateSeriesSchema } from "../src/validation/series.js";
 import { createSummarySchema } from "../src/validation/summary.js";
@@ -76,6 +77,24 @@ describe("request validation", () => {
 
     expect(summary.content).toBe("This is a long article about travel.");
     expect(() => createSummarySchema.parse({ content: "   " })).toThrow();
+  });
+
+  it("validates grammar check requests and responses", () => {
+    const request = grammerCheckSchema.parse({
+      sections: ["আসছে কাল", "তুমি একজন বাংলা ভাষা সম্পাদক।", "হইতেছে"]
+    });
+    const response = grammerCheckResponseSchema.parse({
+      suggestions: [
+        { suggestion: "আগামীকাল", reason: "শব্দ হিসেবে বেশি প্রচলিত" },
+        null,
+        { suggestion: "হচ্ছে", reason: "শব্দ হিসেবে বেশি প্রচলিত" }
+      ]
+    });
+
+    expect(request.sections).toHaveLength(3);
+    expect(response.suggestions[1]).toBeNull();
+    expect(grammerCheckResponseSchema.parse({ suggestions: [{ suggestion: null }] }).suggestions[0]).toBeNull();
+    expect(() => grammerCheckSchema.parse({ sections: [] })).toThrow();
   });
 
   it("allows only image upload content types", () => {

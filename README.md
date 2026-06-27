@@ -445,6 +445,76 @@ Response:
 }
 ```
 
+### Grammar Check
+
+- `POST /api/grammer-check`
+- `GET /api/grammer-check/{jobId}`
+
+Protected endpoint. Requires:
+
+```text
+Authorization: Bearer <token>
+```
+
+Request body:
+
+```json
+{
+  "sections": ["আসছে কাল", "তুমি একজন বাংলা ভাষা সম্পাদক।", "হইতেছে"]
+}
+```
+
+Submit response returns immediately. OpenAI runs in the background.
+
+```json
+{
+  "jobId": "grammar-check-job-id",
+  "status": "pending"
+}
+```
+
+Poll for status:
+
+```text
+GET /api/grammer-check/{jobId}
+```
+
+Pending or processing response:
+
+```json
+{
+  "jobId": "grammar-check-job-id",
+  "status": "processing",
+  "result": null,
+  "error": null,
+  "createdAt": "2026-06-27T00:00:00.000Z",
+  "updatedAt": "2026-06-27T00:00:00.000Z"
+}
+```
+
+Completed response has one result item per section. If there is no suggestion for a section, the item is `null`.
+
+```json
+{
+  "jobId": "grammar-check-job-id",
+  "status": "completed",
+  "result": [
+    {
+      "suggestion": "আগামীকাল",
+      "reason": "শব্দ হিসেবে বেশি প্রচলিত"
+    },
+    null,
+    {
+      "suggestion": "হচ্ছে",
+      "reason": "শব্দ হিসেবে বেশি প্রচলিত"
+    }
+  ],
+  "error": null,
+  "createdAt": "2026-06-27T00:00:00.000Z",
+  "updatedAt": "2026-06-27T00:00:00.000Z"
+}
+```
+
 ### Comments
 
 - `GET /api/posts/{postId}/comments`
@@ -539,6 +609,9 @@ https://us-east-1.console.aws.amazon.com/apigateway/main/develop/routes?api=tch4
   PUT - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments/{commentId}
   PUT - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments/{commentId}/reply
   DELETE - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments/{commentId}
+  POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/summary
+  POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/grammer-check
+  GET - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/grammer-check/{jobId}
 functions:
   authRegister: batayan-serverless-dev-authRegister (10 MB)
   authLogin: batayan-serverless-dev-authLogin (10 MB)
@@ -560,3 +633,7 @@ functions:
   updateComment: batayan-serverless-dev-updateComment (10 MB)
   replyComment: batayan-serverless-dev-replyComment (10 MB)
   deleteComment: batayan-serverless-dev-deleteComment (10 MB)
+  createSummary: batayan-serverless-dev-createSummary (10 MB)
+  createGrammerCheck: batayan-serverless-dev-createGrammerCheck (10 MB)
+  getGrammerCheck: batayan-serverless-dev-getGrammerCheck (10 MB)
+  grammerCheckWorker: batayan-serverless-dev-grammerCheckWorker
