@@ -429,6 +429,7 @@ Delete series response:
 ### Summary
 
 - `POST /api/summary`
+
 Request body:
 
 ```json
@@ -441,7 +442,8 @@ Response:
 
 ```json
 {
-  "summary": "বাংলা ভাষায় তৈরি করা সংক্ষিপ্ত সারাংশ"
+  "jobId": "job-id",
+  "status": "pending"
 }
 ```
 
@@ -474,6 +476,12 @@ Submit response returns immediately. OpenAI runs in the background.
 ```
 
 Poll for status:
+
+```text
+GET /api/worker/{jobId}
+```
+
+Alias:
 
 ```text
 GET /api/grammer-check/{jobId}
@@ -611,6 +619,7 @@ https://us-east-1.console.aws.amazon.com/apigateway/main/develop/routes?api=tch4
   DELETE - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/posts/{postId}/comments/{commentId}
   POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/summary
   POST - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/grammer-check
+  GET - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/worker/{jobId}
   GET - https://tch4co3oq4.execute-api.us-east-1.amazonaws.com/api/grammer-check/{jobId}
 functions:
   authRegister: batayan-serverless-dev-authRegister (10 MB)
@@ -636,4 +645,5 @@ functions:
   createSummary: batayan-serverless-dev-createSummary (10 MB)
   createGrammerCheck: batayan-serverless-dev-createGrammerCheck (10 MB)
   getGrammerCheck: batayan-serverless-dev-getGrammerCheck (10 MB)
-  grammerCheckWorker: batayan-serverless-dev-grammerCheckWorker
+  getWorkerByJobId: batayan-serverless-dev-getWorkerByJobId (10 MB)
+  backgroundJobWorker: batayan-serverless-dev-backgroundJobWorker

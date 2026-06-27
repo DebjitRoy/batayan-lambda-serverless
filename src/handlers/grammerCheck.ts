@@ -1,11 +1,12 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
-import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import OpenAI from "openai";
 import { connectToDatabase } from "../db/mongo.js";
-import { decodeResult, encodeResult, GrammerCheckJobModel } from "../models/grammerCheckJob.js";
+import { BackgroundJobModel } from "../models/backgroundJob.js";
 import { requireAuth } from "../utils/auth.js";
 import { assertObjectId } from "../utils/ids.js";
 import { handle, HttpError, json, parseJsonBody, pathParam } from "../utils/http.js";
+import { invokeWorker } from "../utils/worker.js";
+import { buildPrompt as buildSummaryPrompt } from "./summary.js";
 import { grammerCheckResponseSchema, grammerCheckSchema, type GrammerCheckSuggestion } from "../validation/grammerCheck.js";
 
 const OPENAI_MODEL = "gpt-4o-mini";
@@ -18,7 +19,7 @@ function fromTemplate(strings: TemplateStringsArray, ...values: unknown[]): stri
   return strings.reduce((result, text, index) => `${result}${text}${String(values[index] ?? "")}`, "");
 }
 
-function buildPrompt(sections: string[]): string {
+function buildGrammarPrompt(sections: string[]): string {
   return fromTemplate`You are a Bengali spelling and grammar editor.
 
 Review each section independently. Specially check the bengali punctuations like fullstop(।) comma, semicolone. Do not rewrite a good sentence just to change style.
@@ -62,50 +63,22 @@ function parseSuggestions(content: string, expectedLength: number): GrammerCheck
   return result.data.suggestions;
 }
 
-function getLambdaClient(): LambdaClient {
-  if (process.env.IS_OFFLINE) {
-    return new LambdaClient({
-      region: process.env.AWS_REGION ?? "us-east-1",
-      endpoint: process.env.LAMBDA_ENDPOINT ?? "http://localhost:4002",
-      credentials: {
-        accessKeyId: "offline",
-        secretAccessKey: "offline"
-      }
-    });
-  }
-
-  return new LambdaClient({ region: process.env.AWS_REGION ?? "us-east-1" });
-}
-
-async function invokeWorker(jobId: string): Promise<void> {
-  const functionName = process.env.GRAMMER_CHECK_WORKER_FUNCTION_NAME;
-
-  if (!functionName) {
-    throw new HttpError(500, "GRAMMER_CHECK_WORKER_FUNCTION_NAME is not configured.");
-  }
-
-  await getLambdaClient().send(
-    new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: "Event",
-      Payload: Buffer.from(JSON.stringify({ jobId } satisfies GrammerCheckWorkerEvent))
-    })
-  );
-}
-
 function serializeJob(job: {
   _id: unknown;
+  jobType: string;
+  data: unknown;
   status: string;
-  result?: Array<{ suggestion?: string; reason?: string }> | null;
-  resultNulls?: boolean[] | null;
+  result?: unknown;
   error?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }) {
   return {
     jobId: String(job._id),
+    jobType: job.jobType,
+    data: job.data,
     status: job.status,
-    result: decodeResult(job),
+    result: job.result ?? null,
     error: job.error || null,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt
@@ -117,8 +90,9 @@ export async function createGrammerCheck(event: APIGatewayProxyEventV2): Promise
     requireAuth(event);
     await connectToDatabase();
     const body = parseJsonBody(event, grammerCheckSchema);
-    const job = await GrammerCheckJobModel.create({
-      sections: body.sections,
+    const job = await BackgroundJobModel.create({
+      jobType: "grammarCheck",
+      data: { sections: body.sections },
       status: "pending",
       updatedAt: new Date()
     });
@@ -126,9 +100,9 @@ export async function createGrammerCheck(event: APIGatewayProxyEventV2): Promise
     try {
       await invokeWorker(String(job._id));
     } catch (error) {
-      await GrammerCheckJobModel.findByIdAndUpdate(job._id, {
+      await BackgroundJobModel.findByIdAndUpdate(job._id, {
         status: "failed",
-        error: error instanceof Error ? error.message : "Failed to invoke grammar check worker.",
+        error: error instanceof Error ? error.message : "Failed to invoke background worker.",
         updatedAt: new Date()
       });
       throw error;
@@ -142,27 +116,31 @@ export async function createGrammerCheck(event: APIGatewayProxyEventV2): Promise
 }
 
 export async function getGrammerCheck(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  return getWorkerByJobId(event);
+}
+
+export async function getWorkerByJobId(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   return handle(async () => {
     requireAuth(event);
     await connectToDatabase();
     const jobId = assertObjectId(pathParam(event, "jobId"), "jobId");
-    const job = await GrammerCheckJobModel.findById(jobId).lean();
+    const job = await BackgroundJobModel.findById(jobId).lean();
 
     if (!job) {
-      throw new HttpError(404, "Grammar check job not found.");
+      throw new HttpError(404, "Background job not found.");
     }
 
     return json(200, serializeJob(job));
   });
 }
 
-export async function processGrammerCheck(event: GrammerCheckWorkerEvent): Promise<void> {
+export async function processBackgroundJob(event: GrammerCheckWorkerEvent): Promise<void> {
   await connectToDatabase();
   const jobId = assertObjectId(event.jobId, "jobId");
   const apiKey = process.env.OPENAI_API_KEY?.trim();
 
   if (!apiKey) {
-    await GrammerCheckJobModel.findByIdAndUpdate(jobId, {
+    await BackgroundJobModel.findByIdAndUpdate(jobId, {
       status: "failed",
       error: "OPENAI_API_KEY is not configured.",
       updatedAt: new Date()
@@ -170,48 +148,96 @@ export async function processGrammerCheck(event: GrammerCheckWorkerEvent): Promi
     return;
   }
 
-  const job = await GrammerCheckJobModel.findByIdAndUpdate(
+  const job = await BackgroundJobModel.findByIdAndUpdate(
     jobId,
     { status: "processing", error: "", updatedAt: new Date() },
     { new: true }
   ).lean();
 
   if (!job) {
-    throw new Error(`Grammar check job not found: ${jobId}`);
+    throw new Error(`Background job not found: ${jobId}`);
   }
 
   try {
     const client = new OpenAI({ apiKey });
-    const completion = await client.chat.completions.create({
-      model: OPENAI_MODEL,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "user",
-          content: buildPrompt(job.sections)
-        }
-      ]
-    });
-    const content = typeof completion.choices[0]?.message?.content === "string"
-      ? completion.choices[0].message.content.trim()
-      : "";
+    console.log(`Processing background job: ${jobId}, type: ${job.jobType}`);
 
-    if (!content) {
-      throw new HttpError(502, "OpenAI returned an empty grammar check response.");
+    if (job.jobType === "grammarCheck") {
+      const sections = Array.isArray(job.data?.sections) ? job.data.sections : [];
+
+      if (sections.length === 0) {
+        throw new HttpError(400, "Grammar check job data is invalid.");
+      }
+
+      const completion = await client.chat.completions.create({
+        model: OPENAI_MODEL,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "user",
+            content: buildGrammarPrompt(sections)
+          }
+        ]
+      });
+
+      const content = typeof completion.choices[0]?.message?.content === "string"
+        ? completion.choices[0].message.content.trim()
+        : "";
+
+      if (!content) {
+        throw new HttpError(502, "OpenAI returned an empty grammar check response.");
+      }
+
+      const suggestions = parseSuggestions(content, sections.length);
+      await BackgroundJobModel.findByIdAndUpdate(jobId, {
+        status: "completed",
+        result: suggestions,
+        error: "",
+        updatedAt: new Date()
+      });
+      return;
     }
 
-    const encoded = encodeResult(parseSuggestions(content, job.sections.length));
-    await GrammerCheckJobModel.findByIdAndUpdate(jobId, {
-      status: "completed",
-      result: encoded.result,
-      resultNulls: encoded.resultNulls,
-      error: "",
-      updatedAt: new Date()
-    });
+    if (job.jobType === "summary") {
+      const content = typeof job.data?.content === "string" ? job.data.content : "";
+
+      if (!content) {
+        throw new HttpError(400, "Summary job data is invalid.");
+      }
+
+      const completion = await client.chat.completions.create({
+        model: OPENAI_MODEL,
+        max_tokens: 200,
+        messages: [
+          {
+            role: "user",
+            content: buildSummaryPrompt(content)
+          }
+        ]
+      });
+
+      const summary = typeof completion.choices[0]?.message?.content === "string"
+        ? completion.choices[0].message.content.trim()
+        : "";
+
+      if (!summary) {
+        throw new HttpError(502, "OpenAI returned an empty summary.");
+      }
+
+      await BackgroundJobModel.findByIdAndUpdate(jobId, {
+        status: "completed",
+        result: { summary },
+        error: "",
+        updatedAt: new Date()
+      });
+      return;
+    }
+
+    throw new Error(`Unsupported background job type: ${job.jobType}`);
   } catch (error) {
-    await GrammerCheckJobModel.findByIdAndUpdate(jobId, {
+    await BackgroundJobModel.findByIdAndUpdate(jobId, {
       status: "failed",
-      error: error instanceof Error ? error.message : "Grammar check failed.",
+      error: error instanceof Error ? error.message : "Background job failed.",
       updatedAt: new Date()
     });
     throw error;

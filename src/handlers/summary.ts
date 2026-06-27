@@ -2,30 +2,18 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda
 import OpenAI from "openai";
 import { handle, HttpError, json, parseJsonBody } from "../utils/http.js";
 import { createSummarySchema } from "../validation/summary.js";
+import { BackgroundJobModel } from "../models/backgroundJob.js";
+import { invokeWorker } from "../utils/worker.js";
 import { requireAuth } from "../utils/auth.js";
+import { connectToDatabase } from "../db/mongo.js";
+
+
 
 const OPENAI_MODEL = "gpt-4o-mini";
 const MAX_TOKENS = 200;
-
-/**
- * 
- * @param content return `তুমি একজন বাংলা সম্পাদক।
-
-নিচের লেখাটির একটি সংক্ষিপ্ত সারাংশ তৈরি করো।
-
-নিয়ম:
-- বাংলা ভাষায় লিখবে।
-- সর্বোচ্চ ৫০০ অক্ষর।
-- মূল বিষয়গুলো তুলে ধরবে।
-- কোনো অতিরিক্ত তথ্য যোগ করবে না।
-
-লেখা:
-
-${content}`;
- * @returns 
- */
-function buildPrompt(content: string): string {
+export function buildPrompt(content: string): string {
   return `তুমি একজন বাংলা সম্পাদক।
+
 
 নিচের লেখাটির লেখিকার নিজের ভাষায় একটি সংক্ষিপ্ত সারাংশ তৈরি করো যেন সারাংশটি যেন লিখিকা নিজেই লিখছেন। 
 
@@ -38,12 +26,47 @@ rules:
 - Do not add any extra information.
 - Do not add any special characters or emojis. The text should be readable in plain text.
 
+
 লেখা:
 
 ${content}`;
 }
 
 export async function createSummary(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+  return handle(async () => {
+    requireAuth(event);
+    await connectToDatabase();
+    const body = parseJsonBody(event, createSummarySchema);
+
+        const job = await BackgroundJobModel.create({
+      jobType: "summary",
+      data: {
+        content: body.content
+      },
+      status: "pending",
+      updatedAt: new Date()
+    });
+    
+    try {
+        await invokeWorker(String(job._id));
+    } catch (error) {
+      await BackgroundJobModel.findByIdAndUpdate(job._id, {
+        status: "failed",
+        error: error instanceof Error ? error.message : "Failed to invoke background worker.",
+        updatedAt: new Date()
+      });
+      throw error;
+    }
+
+    return json(202, {
+      jobId: String(job._id),
+      status: "pending"
+    });
+  });
+}
+
+//--------- TODO: Remove this function after the new summary worker is fully implemented and tested. This function directly calls OpenAI API instead of using the background job worker.
+export async function createSummaryV1(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   return handle(async () => {
     requireAuth(event);
     const body = parseJsonBody(event, createSummarySchema);
@@ -77,3 +100,4 @@ export async function createSummary(event: APIGatewayProxyEventV2): Promise<APIG
     return json(200, { summary });
   });
 }
+
