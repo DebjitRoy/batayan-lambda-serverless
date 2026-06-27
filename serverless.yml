@@ -16,6 +16,7 @@ provider:
     JWT_SECRET: ${env:JWT_SECRET, ''}
     S3_BUCKET: ${env:S3_BUCKET, 'batayan-blog-images-${sls:stage}'}
     S3_PUBLIC_BASE_URL: ${env:S3_PUBLIC_BASE_URL, ''}
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY, ''}
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
   iam:
     role:
@@ -168,6 +169,12 @@ functions:
       - httpApi:
           method: DELETE
           path: /api/posts/{postId}/comments/{commentId}
+  createSummary:
+    handler: src/handlers/summary.createSummary
+    events:
+      - httpApi:
+          method: POST
+          path: /api/summary
 
 resources:
   Resources:

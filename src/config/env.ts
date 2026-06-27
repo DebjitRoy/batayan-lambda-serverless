@@ -5,6 +5,7 @@ export type AppEnv = {
   jwtSecret: string;
   s3Bucket: string;
   s3PublicBaseUrl?: string;
+  openAiApiKey?: string;
   awsRegion: string;
 };
 
@@ -20,6 +21,7 @@ export function getEnv(): AppEnv {
     jwtSecret: process.env.JWT_SECRET ?? "",
     s3Bucket: process.env.S3_BUCKET ?? "",
     s3PublicBaseUrl: process.env.S3_PUBLIC_BASE_URL,
+    openAiApiKey: process.env.OPENAI_API_KEY,
     awsRegion: process.env.AWS_REGION ?? "us-east-1"
   };
 }

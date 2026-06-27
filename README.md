@@ -22,6 +22,7 @@ Set these values in `.env` or in your deployment environment:
 - `JWT_SECRET`
 - `S3_BUCKET`
 - `S3_PUBLIC_BASE_URL`
+- `OPENAI_API_KEY`
 - `AWS_REGION`
 
 ## Local Development
@@ -422,6 +423,25 @@ Delete series response:
 {
   "deleted": true,
   "id": "series-id"
+}
+```
+
+### Summary
+
+- `POST /api/summary`
+Request body:
+
+```json
+{
+  "content": "আপনার লেখার পুরো বিষয়বস্তু"
+}
+```
+
+Response:
+
+```json
+{
+  "summary": "বাংলা ভাষায় তৈরি করা সংক্ষিপ্ত সারাংশ"
 }
 ```
 

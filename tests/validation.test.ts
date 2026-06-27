@@ -3,6 +3,7 @@ import { loginSchema, registerSchema } from "../src/validation/auth.js";
 import { createCommentSchema, replyCommentSchema } from "../src/validation/comment.js";
 import { createPostSchema, updatePostSchema } from "../src/validation/post.js";
 import { createSeriesSchema, updateSeriesSchema } from "../src/validation/series.js";
+import { createSummarySchema } from "../src/validation/summary.js";
 import { uploadImageSchema } from "../src/validation/upload.js";
 
 describe("request validation", () => {
@@ -68,6 +69,13 @@ describe("request validation", () => {
     expect(() => createCommentSchema.parse({ username: "A", title: "T", description: "x".repeat(501) })).toThrow();
     expect(() => replyCommentSchema.parse({ reply: "" })).toThrow();
     expect(() => replyCommentSchema.parse({ reply: "x".repeat(501) })).toThrow();
+  });
+
+  it("validates summary requests", () => {
+    const summary = createSummarySchema.parse({ content: "This is a long article about travel." });
+
+    expect(summary.content).toBe("This is a long article about travel.");
+    expect(() => createSummarySchema.parse({ content: "   " })).toThrow();
   });
 
   it("allows only image upload content types", () => {
