@@ -29,9 +29,12 @@ Rules:
 - Return suggested entire text for a section where suggestions are made. Do not return only the corrected words.
 - Return exactly one JSON object and no markdown.
 - JSON shape must be: {"suggestions":[...]}.
-- The suggestions array must have exactly ${sections.length} items, in the same order as the input sections.
 - For a section with no useful spelling or grammar suggestion, return null for that array item.
 - For a section with a suggestion, return {"suggestion":"corrected text","reason":"short Bengali reason"}.
+- each suggestion for a section must contain the suggestion for entire section. Do not split the section into multiple suggestions.
+- Do not remove escape characters like \n, \t, etc. from the text.
+- If there is no suggestionfor a section, return original string as suggestion with reason as null. 
+- The suggestions array must have exactly ${sections.length} items, in the same order as the input sections.
 - Prefer natural, commonly used Bengali.
 - recommend correct punctuation and spelling, but do not change the meaning of the text.
 - Do not rewrite a good sentence just to change style.
