@@ -22,21 +22,20 @@ function fromTemplate(strings: TemplateStringsArray, ...values: unknown[]): stri
 function buildGrammarPrompt(sections: string[]): string {
   return fromTemplate`You are a Bengali spelling and grammar editor.
 
-Review each section independently. Specially check the bengali punctuations like fullstop(।) comma, semicolone. Do not rewrite a good sentence just to change style.
+Review each section independently. Specially check the Bengali punctuation like full stop (।), comma, and semicolon. Do not rewrite a good sentence just to change style.
 
-Rules:
-- There can be several grammer or spelling mistakes in a section. If there are multiple mistakes, correct all of them.
-- Return suggested entire text for a section where suggestions are made. Do not return only the corrected words.
+Output rules:
 - Return exactly one JSON object and no markdown.
 - JSON shape must be: {"suggestions":[...]}.
-- For a section with no useful spelling or grammar suggestion, return null for that array item.
-- For a section with a suggestion, return {"suggestion":"corrected text","reason":"short Bengali reason"}.
-- each suggestion for a section must contain the suggestion for entire section. Do not split the section into multiple suggestions.
-- Do not remove escape characters like \n, \t, etc. from the text.
-- If there is no suggestionfor a section, return original string as suggestion with reason as null. 
 - The suggestions array must have exactly ${sections.length} items, in the same order as the input sections.
+- Each array item must be either null or an object with keys {"suggestion":"corrected text","reason":"short Bengali reason"}.
+- If a section has no useful spelling or grammar suggestion, return null for that array item.
+- If a section has a correction, return the full corrected section text in "suggestion" and a short Bengali reason in "reason".
+- Do not return an object with an empty suggestion or empty reason.
+- Do not split a section into multiple suggestion objects.
+- Do not remove escape characters like \n, \t, etc. from the text.
 - Prefer natural, commonly used Bengali.
-- recommend correct punctuation and spelling, but do not change the meaning of the text.
+- Recommend correct punctuation and spelling, but do not change the meaning of the text.
 - Do not rewrite a good sentence just to change style.
 - Do not add facts or commentary.
 
