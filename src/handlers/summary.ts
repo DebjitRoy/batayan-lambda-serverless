@@ -20,7 +20,7 @@ export function buildPrompt(content: string): string {
 rules:
 - Write in Bengali with content's tone and style.
 - Use Kolkata dialect if the content is in that dialect.
-- If the content is in first person, use first person in the summary.
+- If the content is in first person, use first person in the summary, but no need to start the summary with "আমি" or "আমার" if the content does not start with that.
 - Maximum 500 characters.
 - Highlight the main points.
 - Do not add any extra information.
