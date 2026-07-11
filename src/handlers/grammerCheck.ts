@@ -7,7 +7,7 @@ import { assertObjectId } from "../utils/ids.js";
 import { handle, HttpError, json, parseJsonBody, pathParam } from "../utils/http.js";
 import { invokeWorker } from "../utils/worker.js";
 import { buildPrompt as buildSummaryPrompt } from "./summary.js";
-import { grammerCheckResponseSchema, grammerCheckSchema, type GrammerCheckSuggestion } from "../validation/grammerCheck.js";
+import { grammerCheckResponseSchema, grammerCheckSchema, type GrammerCheckSection, type GrammerCheckSuggestion } from "../validation/grammerCheck.js";
 
 const OPENAI_MODEL = "gpt-4o-mini";
 
@@ -19,18 +19,18 @@ function fromTemplate(strings: TemplateStringsArray, ...values: unknown[]): stri
   return strings.reduce((result, text, index) => `${result}${text}${String(values[index] ?? "")}`, "");
 }
 
-function buildGrammarPrompt(sections: string[]): string {
+function buildGrammarPrompt(sections: GrammerCheckSection[]): string {
   return fromTemplate`You are a Bengali spelling and grammar editor.
 
 Review each section independently. Specially check the Bengali punctuation like full stop (।), comma, and semicolon. Do not rewrite a good sentence just to change style.
 
 Output rules:
 - Return exactly one JSON object and no markdown.
-- JSON shape must be: {"suggestions":[...]}.
+- JSON shape must be: {"suggestions":[...]}. 
 - The suggestions array must have exactly ${sections.length} items, in the same order as the input sections.
-- Each array item must be either null or an object with keys {"suggestion":"corrected text","reason":"short Bengali reason"}.
+- Each array item must be either null or an object with keys {"sectionId":"same id from the input section","suggestion":"corrected text","reason":"short Bengali reason"}.
 - If a section has no useful spelling or grammar suggestion, return null for that array item.
-- If a section has a correction, return the full corrected section text in "suggestion" and a short Bengali reason in "reason".
+- If a section has a correction, return the full corrected section text in "suggestion", keep the same "sectionId" from the input section, and provide a short Bengali reason in "reason".
 - Do not return an object with an empty suggestion or empty reason.
 - Do not split a section into multiple suggestion objects.
 - Do not remove escape characters like \n, \t, etc. from the text.
@@ -77,6 +77,7 @@ function serializeJob(job: {
 }) {
   return {
     jobId: String(job._id),
+    workId: String(job._id),
     jobType: job.jobType,
     data: job.data,
     status: job.status,
@@ -92,9 +93,10 @@ export async function createGrammerCheck(event: APIGatewayProxyEventV2): Promise
     requireAuth(event);
     await connectToDatabase();
     const body = parseJsonBody(event, grammerCheckSchema);
+    const sections = body.sections.map((section: GrammerCheckSection) => ({ id: section.id, text: section.text }));
     const job = await BackgroundJobModel.create({
       jobType: "grammarCheck",
-      data: { sections: body.sections },
+      data: { sections },
       status: "pending",
       updatedAt: new Date()
     });
@@ -112,6 +114,7 @@ export async function createGrammerCheck(event: APIGatewayProxyEventV2): Promise
 
     return json(202, {
       jobId: String(job._id),
+      workId: String(job._id),
       status: "pending"
     });
   });
@@ -165,11 +168,15 @@ export async function processBackgroundJob(event: GrammerCheckWorkerEvent): Prom
     console.log(`Processing background job: ${jobId}, type: ${job.jobType}`);
 
     if (job.jobType === "grammarCheck") {
-      const sections = Array.isArray(job.data?.sections) ? job.data.sections : [];
+      const parsedSections = grammerCheckSchema.safeParse({
+        sections: Array.isArray(job.data?.sections) ? job.data.sections : []
+      });
 
-      if (sections.length === 0) {
+      if (!parsedSections.success || parsedSections.data.sections.length === 0) {
         throw new HttpError(400, "Grammar check job data is invalid.");
       }
+
+      const sections = parsedSections.data.sections;
 
       const completion = await client.chat.completions.create({
         model: OPENAI_MODEL,

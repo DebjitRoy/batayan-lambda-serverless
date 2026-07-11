@@ -81,19 +81,24 @@ describe("request validation", () => {
 
   it("validates grammar check requests and responses", () => {
     const request = grammerCheckSchema.parse({
-      sections: ["আসছে কাল", "তুমি একজন বাংলা ভাষা সম্পাদক।", "হইতেছে"]
+      sections: [
+        { id: "sec-1", text: "আসছে কাল" },
+        { id: "sec-2", text: "তুমি একজন বাংলা ভাষা সম্পাদক।" },
+        { id: "sec-3", text: "হইতেছে" }
+      ]
     });
     const response = grammerCheckResponseSchema.parse({
       suggestions: [
-        { suggestion: "আগামীকাল", reason: "শব্দ হিসেবে বেশি প্রচলিত" },
+        { sectionId: "sec-1", suggestion: "আগামীকাল", reason: "শব্দ হিসেবে বেশি প্রচলিত" },
         null,
-        { suggestion: "হচ্ছে", reason: "শব্দ হিসেবে বেশি প্রচলিত" }
+        { sectionId: "sec-3", suggestion: "হচ্ছে", reason: "শব্দ হিসেবে বেশি প্রচলিত" }
       ]
     });
 
     expect(request.sections).toHaveLength(3);
+    expect(request.sections[0]).toEqual({ id: "sec-1", text: "আসছে কাল" });
     expect(response.suggestions[1]).toBeNull();
-    expect(grammerCheckResponseSchema.parse({ suggestions: [{ suggestion: null }] }).suggestions[0]).toBeNull();
+    expect(grammerCheckResponseSchema.parse({ suggestions: [{ sectionId: "sec-1", suggestion: "x", reason: "y" }] }).suggestions[0]).toEqual({ sectionId: "sec-1", suggestion: "x", reason: "y" });
     expect(() => grammerCheckSchema.parse({ sections: [] })).toThrow();
   });
 
