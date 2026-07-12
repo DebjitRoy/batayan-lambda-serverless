@@ -279,7 +279,7 @@ export async function update(event: APIGatewayProxyEventV2): Promise<APIGatewayP
     await connectToDatabase();
     const postId = assertObjectId(pathParam(event, "postId"), "postId");
     const body = parseJsonBody(event, updatePostSchema);
-    const { summary, ...postPayload } = body;
+    const { summary, aiRequired, ...postPayload } = body;
     await ensureSeriesPart(postPayload.series, postId);
     const post = await PostModel.findByIdAndUpdate(postId, postPayload, { new: true, runValidators: true }).lean();
 
@@ -288,12 +288,13 @@ export async function update(event: APIGatewayProxyEventV2): Promise<APIGatewayP
     }
 
     const [hydratedPost] = await hydrateSeries([post as PostResponse]);
-    const jobResponse = await maybeCreatePostJobs({
+    
+    const jobResponse = aiRequired ? await maybeCreatePostJobs({
       content: post.content,
       summary,
       createSummaryJob: createSummaryJobHandler,
       createGrammerCheckJob: createGrammerCheckJobHandler
-    });
+    }) : {};
 
     return json(200, {
       ...(hydratedPost ?? post),

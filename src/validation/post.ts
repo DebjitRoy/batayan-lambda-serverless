@@ -31,7 +31,10 @@ export const createPostSchema = z.object({
   status: postStatusSchema.default("draft"),
   searchBy: z.array(z.string().trim().min(1)).default([]),
   additionalInfo: z.string().default(""),
-  summary: z.string().trim().max(50000).optional()
+  summary: z.string().trim().max(50000).optional(),
+  aiRequired: z.boolean().default(false),
+  aiSummaryJobId: z.string().trim().optional(),
+  aiGrammerJobId: z.string().trim().optional()
 });
 
 export const updatePostSchema = createPostSchema.partial();
