@@ -32,36 +32,40 @@ rules:
 ${content}`;
 }
 
+export async function createSummaryJob(content: string): Promise<{ jobId: string; status: "pending" }> {
+  await connectToDatabase();
+
+  const job = await BackgroundJobModel.create({
+    jobType: "summary",
+    data: {
+      content
+    },
+    status: "pending",
+    updatedAt: new Date()
+  });
+
+  try {
+    await invokeWorker(String(job._id));
+  } catch (error) {
+    await BackgroundJobModel.findByIdAndUpdate(job._id, {
+      status: "failed",
+      error: error instanceof Error ? error.message : "Failed to invoke background worker.",
+      updatedAt: new Date()
+    });
+    throw error;
+  }
+
+  return {
+    jobId: String(job._id),
+    status: "pending"
+  };
+}
+
 export async function createSummary(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   return handle(async () => {
     requireAuth(event);
-    await connectToDatabase();
     const body = parseJsonBody(event, createSummarySchema);
-
-        const job = await BackgroundJobModel.create({
-      jobType: "summary",
-      data: {
-        content: body.content
-      },
-      status: "pending",
-      updatedAt: new Date()
-    });
-    
-    try {
-        await invokeWorker(String(job._id));
-    } catch (error) {
-      await BackgroundJobModel.findByIdAndUpdate(job._id, {
-        status: "failed",
-        error: error instanceof Error ? error.message : "Failed to invoke background worker.",
-        updatedAt: new Date()
-      });
-      throw error;
-    }
-
-    return json(202, {
-      jobId: String(job._id),
-      status: "pending"
-    });
+    return json(202, await createSummaryJob(body.content));
   });
 }
 

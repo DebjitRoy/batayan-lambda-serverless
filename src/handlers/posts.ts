@@ -6,6 +6,8 @@ import { SeriesModel } from "../models/series.js";
 import { requireAuth } from "../utils/auth.js";
 import { assertObjectId } from "../utils/ids.js";
 import { handle, HttpError, json, parseJsonBody, pathParam, queryNumber } from "../utils/http.js";
+import { createGrammerCheckJob as createGrammerCheckJobHandler } from "./grammerCheck.js";
+import { createSummaryJob as createSummaryJobHandler } from "./summary.js";
 import { createPostSchema, updatePostSchema, updatePostStatusSchema } from "../validation/post.js";
 
 const allowedSort = new Set(["createdAt", "title", "visited", "liked"]);
@@ -17,6 +19,12 @@ type PostResponse = Record<string, unknown> & {
 };
 
 type PostListFilter = Record<string, unknown>;
+type PostContentSection = {
+  id?: string | null;
+  _id?: unknown;
+  header?: string | null;
+  content?: string | null;
+};
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -109,6 +117,72 @@ async function hydrateSeries(posts: PostResponse[]): Promise<Array<PostResponse 
   });
 }
 
+function buildSummaryContent(content: PostContentSection[] | undefined): string {
+  return (content ?? [])
+    .map((section) => {
+      const parts = [section.header, section.content]
+        .filter((part): part is string => typeof part === "string" && part.trim().length > 0);
+      return parts.join("\n");
+    })
+    .filter((segment) => segment.trim().length > 0)
+    .join("\n\n");
+}
+
+function buildGrammarSections(content: PostContentSection[] | undefined): Array<{ id: string; text: string }> {
+  return (content ?? [])
+    .map((section, index) => {
+      const text = [section.header, section.content]
+        .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+        .join("\n");
+
+      if (!text.trim()) {
+        return null;
+      }
+
+      const sectionId = typeof section.id === "string" && section.id.trim().length > 0
+        ? section.id
+        : typeof section._id !== "undefined" && section._id !== null
+          ? String(section._id)
+          : `section-${index + 1}`;
+
+      return {
+        id: sectionId,
+        text
+      };
+    })
+    .filter((section): section is { id: string; text: string } => Boolean(section));
+}
+
+export async function maybeCreatePostJobs({
+  content,
+  summary,
+  createSummaryJob = createSummaryJobHandler,
+  createGrammerCheckJob = createGrammerCheckJobHandler
+}: {
+  content?: PostContentSection[];
+  summary?: string;
+  createSummaryJob?: typeof createSummaryJobHandler;
+  createGrammerCheckJob?: typeof createGrammerCheckJobHandler;
+}): Promise<{ summaryJobId: string | null; grammerJobId: string | null }> {
+  const hasSummary = typeof summary === "string" && summary.trim().length > 0;
+  const summaryContent = buildSummaryContent(content);
+  const grammarSections = buildGrammarSections(content);
+
+  const [summaryJobResult, grammarJobResult] = await Promise.allSettled([
+    hasSummary || !summaryContent.trim()
+      ? Promise.resolve(null)
+      : createSummaryJob(summaryContent),
+    grammarSections.length === 0
+      ? Promise.resolve(null)
+      : createGrammerCheckJob(grammarSections)
+  ]);
+
+  return {
+    summaryJobId: summaryJobResult.status === "fulfilled" ? summaryJobResult.value?.jobId ?? null : null,
+    grammerJobId: grammarJobResult.status === "fulfilled" ? grammarJobResult.value?.jobId ?? null : null
+  };
+}
+
 async function ensureSeriesPart(series: { seriesId: string; part: number } | undefined, postId?: string): Promise<void> {
   if (!series) return;
 
@@ -181,11 +255,21 @@ export async function create(event: APIGatewayProxyEventV2): Promise<APIGatewayP
     requireAuth(event);
     await connectToDatabase();
     const body = parseJsonBody(event, createPostSchema);
-    await ensureSeriesPart(body.series);
-    const post = await PostModel.create(body);
+    const { summary, ...postPayload } = body;
+    await ensureSeriesPart(postPayload.series);
+    const post = await PostModel.create(postPayload);
     const [hydratedPost] = await hydrateSeries([post.toObject() as PostResponse]);
+    const jobResponse = await maybeCreatePostJobs({
+      content: post.content,
+      summary,
+      createSummaryJob: createSummaryJobHandler,
+      createGrammerCheckJob: createGrammerCheckJobHandler
+    });
 
-    return json(201, hydratedPost ?? post.toObject());
+    return json(201, {
+      ...(hydratedPost ?? post.toObject()),
+      ...jobResponse
+    });
   });
 }
 
@@ -195,15 +279,26 @@ export async function update(event: APIGatewayProxyEventV2): Promise<APIGatewayP
     await connectToDatabase();
     const postId = assertObjectId(pathParam(event, "postId"), "postId");
     const body = parseJsonBody(event, updatePostSchema);
-    await ensureSeriesPart(body.series, postId);
-    const post = await PostModel.findByIdAndUpdate(postId, body, { new: true, runValidators: true }).lean();
+    const { summary, ...postPayload } = body;
+    await ensureSeriesPart(postPayload.series, postId);
+    const post = await PostModel.findByIdAndUpdate(postId, postPayload, { new: true, runValidators: true }).lean();
 
     if (!post) {
       throw new HttpError(404, "Post not found.");
     }
 
     const [hydratedPost] = await hydrateSeries([post as PostResponse]);
-    return json(200, hydratedPost ?? post);
+    const jobResponse = await maybeCreatePostJobs({
+      content: post.content,
+      summary,
+      createSummaryJob: createSummaryJobHandler,
+      createGrammerCheckJob: createGrammerCheckJobHandler
+    });
+
+    return json(200, {
+      ...(hydratedPost ?? post),
+      ...jobResponse
+    });
   });
 }
 

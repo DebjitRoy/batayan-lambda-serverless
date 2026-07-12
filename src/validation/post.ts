@@ -30,7 +30,8 @@ export const createPostSchema = z.object({
   series: postSeriesSchema.optional(),
   status: postStatusSchema.default("draft"),
   searchBy: z.array(z.string().trim().min(1)).default([]),
-  additionalInfo: z.string().default("")
+  additionalInfo: z.string().default(""),
+  summary: z.string().trim().max(50000).optional()
 });
 
 export const updatePostSchema = createPostSchema.partial();
