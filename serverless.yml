@@ -4,6 +4,17 @@ frameworkVersion: "4"
 plugins:
   - serverless-offline
 
+package:
+  patterns:
+    - "!src/migration/**"
+    - "!.recovery/**"
+    - "!.local/**"
+    - "!migration-reports/**"
+    - "!.env*"
+    - "!tests/**"
+    - "!scripts/**"
+    - "!docs/**"
+
 provider:
   name: aws
   runtime: nodejs22.x
@@ -12,16 +23,38 @@ provider:
   httpApi:
     cors: true
   environment:
-    MONGODB_URI: ${env:MONGODB_URI, ''}
+    POSTS_TABLE: ${self:service}-${sls:stage}-posts
+    COMMENTS_TABLE: ${self:service}-${sls:stage}-comments
+    USERS_TABLE: ${self:service}-${sls:stage}-users
+    SERIES_TABLE: ${self:service}-${sls:stage}-series
+    JOBS_TABLE: ${self:service}-${sls:stage}-jobs
+    DYNAMODB_ENDPOINT: ${env:DYNAMODB_ENDPOINT, ''}
+    LAMBDA_ENDPOINT: ${env:LAMBDA_ENDPOINT, 'http://localhost:4002'}
     JWT_SECRET: ${env:JWT_SECRET, ''}
     S3_BUCKET: ${env:S3_BUCKET, 'batayan-blog-images-${sls:stage}'}
     S3_PUBLIC_BASE_URL: ${env:S3_PUBLIC_BASE_URL, ''}
     OPENAI_API_KEY: ${env:OPENAI_API_KEY, ''}
     BACKGROUND_JOB_WORKER_FUNCTION_NAME: ${self:service}-${sls:stage}-backgroundJobWorker
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+  logRetentionInDays: 14
   iam:
     role:
       statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:ConditionCheckItem
+          Resource:
+            - !GetAtt PostsTable.Arn
+            - !GetAtt CommentsTable.Arn
+            - !GetAtt UsersTable.Arn
+            - !GetAtt SeriesTable.Arn
+            - !GetAtt JobsTable.Arn
         - Effect: Allow
           Action:
             - s3:PutObject
@@ -32,7 +65,7 @@ provider:
           Action:
             - lambda:InvokeFunction
           Resource:
-            - arn:aws:lambda:${aws:region}:${aws:accountId}:function:${self:service}-${sls:stage}-backgroundJobWorker
+            - Fn::Sub: arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${sls:stage}-backgroundJobWorker
 
 build:
   esbuild:
@@ -204,7 +237,162 @@ functions:
     timeout: 120
 
 resources:
+  Conditions:
+    IsProduction: !Equals ["${sls:stage}", prod]
+    CreateBudget: !And
+      - !Equals ["${sls:stage}", prod]
+      - !Not [!Equals ["${env:BUDGET_ALERT_EMAIL, ''}", ""]]
   Resources:
+    PostsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:service}-${sls:stage}-posts
+        TableClass: STANDARD
+        BillingMode: PROVISIONED
+        DeletionProtectionEnabled: !If [IsProduction, true, false]
+        AttributeDefinitions:
+          - AttributeName: _id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: _id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: !If [IsProduction, 10, 1]
+          WriteCapacityUnits: !If [IsProduction, 15, 1]
+    CommentsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:service}-${sls:stage}-comments
+        TableClass: STANDARD
+        BillingMode: PROVISIONED
+        DeletionProtectionEnabled: !If [IsProduction, true, false]
+        AttributeDefinitions:
+          - AttributeName: post
+            AttributeType: S
+          - AttributeName: _id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: post
+            KeyType: HASH
+          - AttributeName: _id
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: !If [IsProduction, 2, 1]
+          WriteCapacityUnits: !If [IsProduction, 2, 1]
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:service}-${sls:stage}-users
+        TableClass: STANDARD
+        BillingMode: PROVISIONED
+        DeletionProtectionEnabled: !If [IsProduction, true, false]
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: !If [IsProduction, 1, 1]
+          WriteCapacityUnits: !If [IsProduction, 1, 1]
+    SeriesTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:service}-${sls:stage}-series
+        TableClass: STANDARD
+        BillingMode: PROVISIONED
+        DeletionProtectionEnabled: !If [IsProduction, true, false]
+        AttributeDefinitions:
+          - AttributeName: seriesId
+            AttributeType: S
+          - AttributeName: recordKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: seriesId
+            KeyType: HASH
+          - AttributeName: recordKey
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: !If [IsProduction, 1, 1]
+          WriteCapacityUnits: !If [IsProduction, 1, 1]
+    JobsTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        TableName: ${self:service}-${sls:stage}-jobs
+        TableClass: STANDARD
+        BillingMode: PROVISIONED
+        DeletionProtectionEnabled: !If [IsProduction, true, false]
+        AttributeDefinitions:
+          - AttributeName: _id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: _id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: !If [IsProduction, 3, 1]
+          WriteCapacityUnits: !If [IsProduction, 3, 1]
+    MonthlyBudget:
+      Type: AWS::Budgets::Budget
+      Condition: CreateBudget
+      Properties:
+        Budget:
+          BudgetName: ${self:service}-monthly-account-spend
+          BudgetType: COST
+          TimeUnit: MONTHLY
+          BudgetLimit:
+            Amount: 5
+            Unit: USD
+        NotificationsWithSubscribers:
+          - Notification:
+              NotificationType: ACTUAL
+              ComparisonOperator: GREATER_THAN
+              ThresholdType: ABSOLUTE_VALUE
+              Threshold: 1
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: ${env:BUDGET_ALERT_EMAIL, ''}
+          - Notification:
+              NotificationType: ACTUAL
+              ComparisonOperator: GREATER_THAN
+              ThresholdType: ABSOLUTE_VALUE
+              Threshold: 2
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: ${env:BUDGET_ALERT_EMAIL, ''}
+          - Notification:
+              NotificationType: ACTUAL
+              ComparisonOperator: GREATER_THAN
+              ThresholdType: ABSOLUTE_VALUE
+              Threshold: 3
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: ${env:BUDGET_ALERT_EMAIL, ''}
+          - Notification:
+              NotificationType: ACTUAL
+              ComparisonOperator: GREATER_THAN
+              ThresholdType: ABSOLUTE_VALUE
+              Threshold: 4
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: ${env:BUDGET_ALERT_EMAIL, ''}
+          - Notification:
+              NotificationType: ACTUAL
+              ComparisonOperator: GREATER_THAN
+              ThresholdType: ABSOLUTE_VALUE
+              Threshold: 5
+            Subscribers:
+              - SubscriptionType: EMAIL
+                Address: ${env:BUDGET_ALERT_EMAIL, ''}
     SpaRewriteCloudFrontFunction:
       Type: AWS::CloudFront::Function
       Properties:
@@ -230,6 +418,16 @@ resources:
             return request;
           }
   Outputs:
+    PostsTableName:
+      Value: !Ref PostsTable
+    CommentsTableName:
+      Value: !Ref CommentsTable
+    UsersTableName:
+      Value: !Ref UsersTable
+    SeriesTableName:
+      Value: !Ref SeriesTable
+    JobsTableName:
+      Value: !Ref JobsTable
     SpaRewriteCloudFrontFunctionName:
       Description: CloudFront Function name for SPA route rewrites.
       Value:

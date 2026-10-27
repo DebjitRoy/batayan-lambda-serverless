@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loginSchema, registerSchema } from "../src/validation/auth.js";
-import { createCommentSchema, replyCommentSchema } from "../src/validation/comment.js";
+import { createCommentSchema, replyCommentSchema, updateCommentSchema } from "../src/validation/comment.js";
 import { grammerCheckResponseSchema, grammerCheckSchema } from "../src/validation/grammerCheck.js";
 import { createPostSchema, updatePostSchema } from "../src/validation/post.js";
 import { createSeriesSchema, updateSeriesSchema } from "../src/validation/series.js";
@@ -25,6 +25,13 @@ describe("request validation", () => {
     expect(updatePostSchema.parse({ gist: "updated" }).gist).toBe("updated");
     expect(() => createPostSchema.parse({ title: "x".repeat(101), postType: "travel" })).toThrow();
     expect(() => createPostSchema.parse({ title: "Post", postType: "food" })).toThrow();
+  });
+
+  it("does not inject create defaults into partial updates", () => {
+    expect(updatePostSchema.parse({ gist: "Changed" })).toEqual({ gist: "Changed" });
+    expect(updateCommentSchema.parse({ title: "Changed" })).toEqual({ title: "Changed" });
+    expect(updateSeriesSchema.parse({ title: "Changed" })).toEqual({ title: "Changed" });
+    expect(updatePostSchema.parse({})).toEqual({});
   });
 
   it("validates optional post series metadata", () => {

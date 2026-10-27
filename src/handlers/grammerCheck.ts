@@ -1,7 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import OpenAI from "openai";
-import { connectToDatabase } from "../db/mongo.js";
-import { BackgroundJobModel } from "../models/backgroundJob.js";
+import { createJob, findJob, claimJob, finishJob } from "../db/jobs.js";
 import { requireAuth } from "../utils/auth.js";
 import { assertObjectId } from "../utils/ids.js";
 import { handle, HttpError, json, parseJsonBody, pathParam } from "../utils/http.js";
@@ -72,8 +71,8 @@ function serializeJob(job: {
   status: string;
   result?: unknown;
   error?: string;
-  createdAt?: Date;
-  updatedAt?: Date;
+  createdAt?: string;
+  updatedAt?: string;
 }) {
   return {
     jobId: String(job._id),
@@ -89,23 +88,16 @@ function serializeJob(job: {
 }
 
 export async function createGrammerCheckJob(sections: Array<{ id: string; text: string }>): Promise<{ jobId: string; workId: string; status: "pending" }> {
-  await connectToDatabase();
 
-  const job = await BackgroundJobModel.create({
-    jobType: "grammarCheck",
-    data: { sections },
-    status: "pending",
-    updatedAt: new Date()
-  });
+  const job = await createJob("grammarCheck", { sections });
 
   try {
     await invokeWorker(String(job._id));
   } catch (error) {
-    await BackgroundJobModel.findByIdAndUpdate(job._id, {
+    await finishJob(job._id, {
       status: "failed",
-      error: error instanceof Error ? error.message : "Failed to invoke background worker.",
-      updatedAt: new Date()
-    });
+      error: error instanceof Error ? error.message : "Failed to invoke background worker."
+    }, "pending");
     throw error;
   }
 
@@ -132,9 +124,8 @@ export async function getGrammerCheck(event: APIGatewayProxyEventV2): Promise<AP
 export async function getWorkerByJobId(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   return handle(async () => {
     requireAuth(event);
-    await connectToDatabase();
     const jobId = assertObjectId(pathParam(event, "jobId"), "jobId");
-    const job = await BackgroundJobModel.findById(jobId).lean();
+    const job = await findJob(jobId);
 
     if (!job) {
       throw new HttpError(404, "Background job not found.");
@@ -145,28 +136,11 @@ export async function getWorkerByJobId(event: APIGatewayProxyEventV2): Promise<A
 }
 
 export async function processBackgroundJob(event: GrammerCheckWorkerEvent): Promise<void> {
-  await connectToDatabase();
   const jobId = assertObjectId(event.jobId, "jobId");
+  const job = await claimJob(jobId);
+  if (!job) { if (!(await findJob(jobId))) throw new Error(`Background job not found: ${jobId}`); return; }
   const apiKey = process.env.OPENAI_API_KEY?.trim();
-
-  if (!apiKey) {
-    await BackgroundJobModel.findByIdAndUpdate(jobId, {
-      status: "failed",
-      error: "OPENAI_API_KEY is not configured.",
-      updatedAt: new Date()
-    });
-    return;
-  }
-
-  const job = await BackgroundJobModel.findByIdAndUpdate(
-    jobId,
-    { status: "processing", error: "", updatedAt: new Date() },
-    { new: true }
-  ).lean();
-
-  if (!job) {
-    throw new Error(`Background job not found: ${jobId}`);
-  }
+  if (!apiKey) { await finishJob(jobId, { status: "failed", error: "OPENAI_API_KEY is not configured." }); return; }
 
   try {
     const client = new OpenAI({ apiKey });
@@ -203,11 +177,11 @@ export async function processBackgroundJob(event: GrammerCheckWorkerEvent): Prom
       }
 
       const suggestions = parseSuggestions(content, sections.length);
-      await BackgroundJobModel.findByIdAndUpdate(jobId, {
+      await finishJob(jobId, {
         status: "completed",
         result: suggestions,
         error: "",
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       });
       return;
     }
@@ -238,21 +212,21 @@ export async function processBackgroundJob(event: GrammerCheckWorkerEvent): Prom
         throw new HttpError(502, "OpenAI returned an empty summary.");
       }
 
-      await BackgroundJobModel.findByIdAndUpdate(jobId, {
+      await finishJob(jobId, {
         status: "completed",
         result: { summary },
         error: "",
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       });
       return;
     }
 
     throw new Error(`Unsupported background job type: ${job.jobType}`);
   } catch (error) {
-    await BackgroundJobModel.findByIdAndUpdate(jobId, {
+    await finishJob(jobId, {
       status: "failed",
       error: error instanceof Error ? error.message : "Background job failed.",
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     });
     throw error;
   }

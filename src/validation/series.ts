@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialWithoutDefaults } from "./partial.js";
 import { postTypeSchema } from "./post.js";
 
 export const createSeriesSchema = z.object({
@@ -8,4 +9,4 @@ export const createSeriesSchema = z.object({
   searchBy: z.array(z.string().trim().min(1)).default([])
 });
 
-export const updateSeriesSchema = createSeriesSchema.partial();
+export const updateSeriesSchema = partialWithoutDefaults(createSeriesSchema.shape);

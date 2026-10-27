@@ -6,20 +6,26 @@
   "scripts": {
     "build": "serverless package",
     "dev": "serverless offline",
+    "dev:local": "node scripts/dev-local.mjs",
     "deploy": "serverless deploy",
     "remove": "serverless remove",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "recovery:preserve": "node scripts/preserve-backups.mjs",
+    "db:local:setup": "node scripts/local-tables.mjs",
+    "test:integration": "node scripts/test-integration.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1157.0",
     "@aws-sdk/client-lambda": "3.1061.0",
     "@aws-sdk/client-s3": "3.1061.0",
+    "@aws-sdk/lib-dynamodb": "3.1157.0",
     "@aws-sdk/s3-request-presigner": "3.1061.0",
     "bcryptjs": "3.0.3",
     "jsonwebtoken": "9.0.3",
-    "mongoose": "9.6.3",
     "openai": "^5.0.0",
+    "snowball-stemmers": "0.6.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

@@ -8,3 +8,9 @@ coverage/
 npm-debug.log*
 serverless-offline*.log
 dist/
+src/migration/*.json
+.recovery/
+.local/
+migration-reports/
+*.pid
+dynamodb-local-metadata.json

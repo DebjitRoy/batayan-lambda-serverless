@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialWithoutDefaults } from "./partial.js";
 
 export const createCommentSchema = z.object({
   username: z.string().trim().min(1).max(100),
@@ -7,7 +8,7 @@ export const createCommentSchema = z.object({
   reply: z.string().trim().max(500).default("")
 });
 
-export const updateCommentSchema = createCommentSchema.partial();
+export const updateCommentSchema = partialWithoutDefaults(createCommentSchema.shape);
 
 export const replyCommentSchema = z.object({
   reply: z.string().trim().min(1).max(500)

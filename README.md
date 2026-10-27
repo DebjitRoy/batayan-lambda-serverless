@@ -1,35 +1,66 @@
 # Batayan Serverless APIs
 
-TypeScript AWS Lambda APIs for the Batayan Blog application. The service uses MongoDB through Mongoose, validates requests with Zod, and stores post images in S3.
+TypeScript AWS Lambda APIs for the Batayan Blog application. The service uses DynamoDB through AWS SDK v3, validates requests with Zod, and stores post images in S3.
 
 ## Requirements
 
 - Node.js 22 or newer
 - AWS credentials configured for deployment
-- MongoDB connection string
+- DynamoDB Local for local development, or deployed DynamoDB tables
 - S3 bucket for blog images
 
 ## Setup
 
 ```bash
-npm install
+npm ci --legacy-peer-deps
 cp .env.example .env
 ```
 
 Set these values in `.env` or in your deployment environment:
 
-- `MONGODB_URI`
+- `POSTS_TABLE`, `COMMENTS_TABLE`, `USERS_TABLE`, `SERIES_TABLE`, `JOBS_TABLE`
 - `JWT_SECRET`
 - `S3_BUCKET`
 - `S3_PUBLIC_BASE_URL`
 - `OPENAI_API_KEY`
 - `AWS_REGION`
+- `DYNAMODB_ENDPOINT` (loopback URL for local development only)
+- `BUDGET_ALERT_EMAIL` (optional recipient for production spending alerts)
+
+The existing OpenAI 5 SDK declares an optional Zod 3 peer dependency while this project uses Zod 4 for its own validation. Use `--legacy-peer-deps` to install the locked dependency tree; the OpenAI Zod helper is not used.
+
+MongoDB and `MONGODB_URI` are no longer required. See the [migration plan](docs/dynamodb-migration-plan.md) and [recovery record](docs/recovery-record.md). Data import is a separate phase; deploying this code creates empty tables.
 
 ## Local Development
 
+For the local smoke-test configuration, start DynamoDB Local on port 8000, then run:
+
 ```bash
+npm run dev:local
+```
+
+This command creates the local tables and starts the API on port 4100 with the worker on port 4102. It explicitly selects a loopback database endpoint even when `DYNAMODB_ENDPOINT` is unset or empty, and disables paid OpenAI calls. In a second terminal, run `node scripts/smoke-local.mjs`. Keep both DynamoDB Local and the API running. The endpoint settings apply only to this process, so they do not change AWS deployment configuration.
+
+For manually configured development with other ports or AI enabled, follow the steps below.
+
+Start DynamoDB Local (Docker example):
+
+```bash
+docker run --rm -p 127.0.0.1:8000:8000 amazon/dynamodb-local -jar DynamoDBLocal.jar -sharedDb -inMemory
+```
+
+Alternatively, download DynamoDB Local from AWS and run its JAR using Java 17 or newer. Keep the loopback port private. The in-memory database is discarded when the process stops.
+
+Create the five local tables, set the values from `.env.example`, then start the API:
+
+```bash
+npm run db:local:setup
 npm run dev
 ```
+
+`db:local:setup` accepts only a loopback endpoint and never creates AWS tables. For offline background jobs, `serverless.yml` supplies the worker function name. Summary/grammar requests require an OpenAI key; omit it to test the failed-job path without paid calls. S3 upload tests still require a reachable test bucket unless mocked.
+
+When changing the Offline Lambda port, also set `LAMBDA_ENDPOINT` to match it. For example, use `http://localhost:4102` with `--lambdaPort=4102`. On Windows PowerShell, use `npm.cmd run dev -- --httpPort=4100 --lambdaPort=4102` to forward these options.
 
 Serverless Offline serves the API at:
 
@@ -41,21 +72,34 @@ http://localhost:4000
 
 ```bash
 npm test
+npm run test:integration
 npm run typecheck
 npm run build
 ```
 
+The integration command requires DynamoDB Local on port 8000 (or `DYNAMODB_ENDPOINT`), creates isolated synthetic-data tables, and deletes them afterward. It tests all handler groups, concurrency, and multi-page reads; S3, Lambda dispatch, and OpenAI are mocked. Unit tests skip this suite unless an endpoint is supplied. Serverless packaging may need its existing login refreshed over the network.
+
 ## Deploy
+
+Unset `DYNAMODB_ENDPOINT` (including in `.env`) before packaging/deploying to AWS. Only local/offline use permits an endpoint override. Preserve the production `JWT_SECRET` if existing tokens should remain valid. Use secure deployment environment variables or parameter-store resolution for secrets; do not commit them.
 
 ```bash
 npm run deploy -- --stage dev
 ```
+
+CloudFormation provisions five DynamoDB Standard tables and exports their names. Production stage `prod` uses 17 read/22 write capacity units in total; other stages use 5/5 in total. Include all active stages and other account usage when checking free-tier availability. Tables have retention policies, encryption, and production deletion protection. Runtime IAM permits data operations only on these five tables; deploy/import credentials are separate.
+
+One dev stage plus prod allocates 27 write units, exceeding the plan's 25-unit free allowance assumption. Prefer local development and remove unneeded AWS stages; verify the account's actual allowance before deploying.
+
+For the agreed $5 monthly budget, set `BUDGET_ALERT_EMAIL` and deploy `--stage prod` to create an account-wide AWS Budget with actual-spend alerts over $1, $2, $3, $4, and $5. Without the email, the budget resource is omitted. AWS billing data and email alerts can lag; alerts do not stop spending. Backup/PITR, S3, Lambda, API Gateway, logs, CloudFront, and OpenAI costs must be budgeted separately. No cloud resources or alerts are activated by local setup or packaging.
 
 Remove the stack:
 
 ```bash
 npm run remove -- --stage dev
 ```
+
+Removal retains DynamoDB tables. Retained tables can continue to incur provisioned-capacity charges; inspect them explicitly before cleaning up temporary stages. Do not delete production data as part of routine stack cleanup.
 
 ## CloudFront SPA Routes
 

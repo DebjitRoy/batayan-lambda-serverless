@@ -2,10 +2,9 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda
 import OpenAI from "openai";
 import { handle, HttpError, json, parseJsonBody } from "../utils/http.js";
 import { createSummarySchema } from "../validation/summary.js";
-import { BackgroundJobModel } from "../models/backgroundJob.js";
+import { createJob, finishJob } from "../db/jobs.js";
 import { invokeWorker } from "../utils/worker.js";
 import { requireAuth } from "../utils/auth.js";
-import { connectToDatabase } from "../db/mongo.js";
 
 
 
@@ -33,25 +32,16 @@ ${content}`;
 }
 
 export async function createSummaryJob(content: string): Promise<{ jobId: string; status: "pending" }> {
-  await connectToDatabase();
 
-  const job = await BackgroundJobModel.create({
-    jobType: "summary",
-    data: {
-      content
-    },
-    status: "pending",
-    updatedAt: new Date()
-  });
+  const job = await createJob("summary", { content });
 
   try {
     await invokeWorker(String(job._id));
   } catch (error) {
-    await BackgroundJobModel.findByIdAndUpdate(job._id, {
+    await finishJob(job._id, {
       status: "failed",
-      error: error instanceof Error ? error.message : "Failed to invoke background worker.",
-      updatedAt: new Date()
-    });
+      error: error instanceof Error ? error.message : "Failed to invoke background worker."
+    }, "pending");
     throw error;
   }
 

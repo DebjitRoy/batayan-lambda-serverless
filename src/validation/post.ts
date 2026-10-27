@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialWithoutDefaults } from "./partial.js";
 
 export const postTypeSchema = z.enum(["travel", "books", "miscl", "guest"]);
 
@@ -37,6 +38,6 @@ export const createPostSchema = z.object({
   aiGrammerJobId: z.string().trim().optional()
 });
 
-export const updatePostSchema = createPostSchema.partial();
+export const updatePostSchema = partialWithoutDefaults(createPostSchema.shape);
 
 export const updatePostStatusSchema = z.object({ status: postStatusSchema });
