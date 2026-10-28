@@ -38,7 +38,8 @@ export async function createUploadUrl(key: string, contentType: string): Promise
     new PutObjectCommand({
       Bucket: getEnv().s3Bucket,
       Key: key,
-      ContentType: contentType
+      ContentType: contentType,
+      ACL: "public-read"
     }),
     { expiresIn: 900 }
   );

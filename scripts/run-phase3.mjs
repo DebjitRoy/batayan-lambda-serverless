@@ -1,0 +1,11 @@
+import { buildSync } from "esbuild";
+import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+const mode = process.argv[2] ?? "local";
+const entries = { local: "scripts/acceptance-local.ts", images: "scripts/audit-images.ts", aws: "scripts/acceptance-aws.ts" };
+if (!entries[mode]) throw new Error("Unknown Phase 3 command.");
+mkdirSync(".local", { recursive: true });
+const outfile = resolve(`.local/phase3-${mode}.cjs`);
+buildSync({ entryPoints: [entries[mode]], outfile, bundle: true, packages: "external", platform: "node", target: "node22", format: "cjs" });
+process.exitCode = await createRequire(import.meta.url)(outfile).main(process.argv.slice(3));

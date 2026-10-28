@@ -31,6 +31,17 @@ The existing OpenAI 5 SDK declares an optional Zod 3 peer dependency while this 
 
 MongoDB and `MONGODB_URI` are no longer required. See the [migration plan](docs/dynamodb-migration-plan.md) and [recovery record](docs/recovery-record.md). Data import is a separate phase; deploying this code creates empty tables.
 
+## Backup Migration
+
+The [Phase 2 runbook](docs/phase2-migration-runbook.md) describes the validated import mapping, local rehearsal, resumable import, private manifests, and AWS target checks.
+
+```bash
+npm run migration:validate -- --source src/migration --out migration-reports/validation.json
+npm run migration:rehearse
+```
+
+Validation needs no database. Rehearsal requires DynamoDB Local on port 8000 and uses isolated tables, leaving the API's dev tables untouched. Import and verification require explicit target account/Region/stage and output-report arguments; use `npm run migration:import -- --help` for details. The importer never overwrites conflicting records or invokes AI jobs.
+
 ## Local Development
 
 For the local smoke-test configuration, start DynamoDB Local on port 8000, then run:
@@ -70,6 +81,8 @@ http://localhost:4000
 
 ## Test and Build
 
+For the full Phase 3 workflow, see the [acceptance testing guide](docs/phase3-testing-guide.md). With DynamoDB Local running, `npm run test:phase3` runs regression tests, MongoDB reference comparisons, restored-data HTTP acceptance and typecheck. `npm run test:release-gates` reports remaining automated release checks; the real migrated-user login needs private test credentials.
+
 ```bash
 npm test
 npm run test:integration
@@ -87,9 +100,9 @@ Unset `DYNAMODB_ENDPOINT` (including in `.env`) before packaging/deploying to AW
 npm run deploy -- --stage dev
 ```
 
-CloudFormation provisions five DynamoDB Standard tables and exports their names. Production stage `prod` uses 17 read/22 write capacity units in total; other stages use 5/5 in total. Include all active stages and other account usage when checking free-tier availability. Tables have retention policies, encryption, and production deletion protection. Runtime IAM permits data operations only on these five tables; deploy/import credentials are separate.
+CloudFormation provisions five DynamoDB Standard tables and exports their names. Production stage `prod` uses 22 read/22 write capacity units in total; other stages use 5/5 in total. Include all active stages and other account usage when checking free-tier availability. Tables have retention policies, encryption, and production deletion protection. Runtime IAM permits data operations only on these five tables; deploy/import credentials are separate.
 
-One dev stage plus prod allocates 27 write units, exceeding the plan's 25-unit free allowance assumption. Prefer local development and remove unneeded AWS stages; verify the account's actual allowance before deploying.
+One dev stage plus prod allocates 27 read and 27 write units, exceeding the plan's 25-unit free allowance assumption. Prefer local development and remove unneeded AWS stages; verify the account's actual allowance before deploying.
 
 For the agreed $5 monthly budget, set `BUDGET_ALERT_EMAIL` and deploy `--stage prod` to create an account-wide AWS Budget with actual-spend alerts over $1, $2, $3, $4, and $5. Without the email, the budget resource is omitted. AWS billing data and email alerts can lag; alerts do not stop spending. Backup/PITR, S3, Lambda, API Gateway, logs, CloudFront, and OpenAI costs must be budgeted separately. No cloud resources or alerts are activated by local setup or packaging.
 

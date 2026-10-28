@@ -14,7 +14,18 @@
     "typecheck": "tsc --noEmit",
     "recovery:preserve": "node scripts/preserve-backups.mjs",
     "db:local:setup": "node scripts/local-tables.mjs",
-    "test:integration": "node scripts/test-integration.mjs"
+    "db:local:start": "node scripts/start-dynamodb.mjs",
+    "test:integration": "node scripts/test-integration.mjs",
+    "test:parity": "node scripts/test-parity.mjs",
+    "test:acceptance": "node scripts/run-phase3.mjs local",
+    "test:images": "node scripts/run-phase3.mjs images",
+    "test:aws": "node scripts/run-phase3.mjs aws",
+    "test:phase3": "node scripts/test-phase3.mjs",
+    "test:release-gates": "node scripts/release-gates.mjs",
+    "migration:validate": "node scripts/run-migration.mjs validate",
+    "migration:import": "node scripts/run-migration.mjs import",
+    "migration:verify": "node scripts/run-migration.mjs verify",
+    "migration:rehearse": "node scripts/run-migration.mjs rehearse"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "3.1157.0",
@@ -29,10 +40,14 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@aws-sdk/client-sts": "3.1157.0",
     "@types/aws-lambda": "8.10.161",
     "@types/jsonwebtoken": "9.0.10",
     "@types/node": "24.10.1",
     "esbuild": "0.28.0",
+    "fflate": "0.8.3",
+    "mongodb": "7.7.0",
+    "mongodb-memory-server": "11.3.0",
     "serverless": "4.37.0",
     "serverless-offline": "14.7.1",
     "typescript": "6.0.3",

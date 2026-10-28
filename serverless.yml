@@ -259,7 +259,7 @@ resources:
           - AttributeName: _id
             KeyType: HASH
         ProvisionedThroughput:
-          ReadCapacityUnits: !If [IsProduction, 10, 1]
+          ReadCapacityUnits: !If [IsProduction, 15, 1]
           WriteCapacityUnits: !If [IsProduction, 15, 1]
     CommentsTable:
       Type: AWS::DynamoDB::Table

@@ -19,6 +19,7 @@ import { getDocumentClient, scanItems, queryItems } from "../src/db/dynamodb.js"
 import { newId } from "../src/utils/ids.js";
 import { signToken } from "../src/utils/auth.js";
 import { hash } from "bcryptjs";
+import { uploadObject, createUploadUrl } from "../src/utils/s3.js";
 import { post as legacyPost, user as legacyUser } from "./fixtures/legacy.js";
 
 const body = (value: unknown): any => JSON.parse((value as { body: string }).body);
@@ -146,6 +147,48 @@ describe.skipIf(!process.env.DYNAMODB_ENDPOINT)("DynamoDB Local handler and tran
     const failed = await createJob("summary", { content: "Synthetic content" }); delete process.env.OPENAI_API_KEY;
     await grammar.processBackgroundJob({ jobId: failed._id }); expect((await findJob(failed._id))?.status).toBe("failed"); process.env.OPENAI_API_KEY = "synthetic-key";
     expect(status(await grammar.getWorkerByJobId(event(undefined, { jobId: id })))).toBe(401);
+  });
+  it("rejects missing upload targets before calling S3", async () => {
+    vi.mocked(uploadObject).mockClear(); vi.mocked(createUploadUrl).mockClear();
+    expect(status(await uploads.hero(event({ fileName: "x.png", contentType: "image/png", dataBase64: "eA==" }, { postId: newId() }, {}, true)))).toBe(404);
+    const value = await createPost({ title: "Existing", postType: "travel" });
+    expect(status(await uploads.section(event({ fileName: "x.png", contentType: "image/png" }, { postId: value._id, sectionId: newId() }, {}, true)))).toBe(404);
+    expect(uploadObject).not.toHaveBeenCalled(); expect(createUploadUrl).not.toHaveBeenCalled();
+  });
+  it("preserves both section images when concurrent edits conflict and are retried", async () => {
+    const value = await createPost({ title: "Images", postType: "travel", content: [{ header: "One" }, { header: "Two" }] });
+    const paths = value.content.map(section => ({ postId: value._id, sectionId: section._id }));
+    const results = await Promise.all(paths.map(path => uploads.section(event({ fileName: "x.png", contentType: "image/png" }, path, {}, true))));
+    for (const [index, result] of results.entries()) {
+      expect([200, 409]).toContain(status(result));
+      if (status(result) === 409) expect(status(await uploads.section(event({ fileName: "x.png", contentType: "image/png" }, paths[index], {}, true)))).toBe(200);
+    }
+    const stored = body(await posts.get(event(undefined, { postId: value._id })));
+    for (const section of stored.content) expect(section.image).toBe(`photo_${value._id}-${section._id}.png`);
+  });
+  it("serializes series reassignment/deletion and preserves member counts across groups", async () => {
+    const first = body(await series.create(event({ title: "First race" }, {}, {}, true)));
+    const second = body(await series.create(event({ title: "Second race" }, {}, {}, true)));
+    const post = await createPost({ title: "Moving", postType: "travel", series: { seriesId: first._id, part: 1 } });
+    await updatePost(post._id, { series: { seriesId: second._id, part: 1 } });
+    expect(status(await series.remove(event(undefined, { seriesId: first._id }, {}, true)))).toBe(200);
+    expect(body(await series.get(event(undefined, { seriesId: second._id }))).totalParts).toBe(1);
+    const [deleted, assigned] = await Promise.all([
+      series.remove(event(undefined, { seriesId: second._id }, {}, true)),
+      posts.create(event({ title: "Concurrent assignment", postType: "travel", series: { seriesId: second._id, part: 2 } }, {}, {}, true))
+    ]);
+    expect(status(deleted)).toBe(409); expect(status(assigned)).toBe(201);
+  });
+  it("persists malformed grammar and upstream AI failures without replaying terminal jobs", async () => {
+    mocks.completion.mockReset(); mocks.completion.mockResolvedValue({ choices: [{ message: { content: "invalid JSON" } }] });
+    const invalid = await createJob("grammarCheck", { sections: [{ id: "s1", text: "গল্প" }] });
+    await expect(grammar.processBackgroundJob({ jobId: invalid._id })).rejects.toThrow("invalid JSON");
+    expect((await findJob(invalid._id))?.status).toBe("failed");
+    await grammar.processBackgroundJob({ jobId: invalid._id }); expect(mocks.completion).toHaveBeenCalledTimes(1);
+    mocks.completion.mockRejectedValue(new Error("Synthetic upstream failure"));
+    const failed = await createJob("summary", { content: "Synthetic" });
+    await expect(grammar.processBackgroundJob({ jobId: failed._id })).rejects.toThrow("Synthetic upstream failure");
+    expect((await findJob(failed._id))?.status).toBe("failed");
   });
   it("traverses real 1 MB scan/query boundaries without leaking storage metadata", async () => {
     const payload = "x".repeat(60000), parent = newId();

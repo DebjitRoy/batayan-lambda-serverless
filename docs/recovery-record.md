@@ -10,12 +10,12 @@ Updated 27 October 2026. This record distinguishes local preparation from produc
 | Recovery-point acceptance | Pending: confirm loss of changes after the backups is acceptable |
 | Monthly budget | **USD 5**, confirmed by the owner |
 | Spending alerts | Infrastructure prepared for actual monthly account spending over $1, $2, $3, $4, and $5; recipient configured in the ignored local `.env` file |
-| AWS account and Region | Target account unconfirmed; configuration defaults to `us-east-1` |
-| Image bucket and access | Pending verification; filenames are retained |
-| Known migrated-user password | Pending acceptance test; do not put the password in this document |
+| AWS account and Region | Default profile verified in account 523185248252; owner confirmed existing service Region `us-east-1` |
+| Image bucket and access | `bengali-blog-static-uploads`; all 1,123 legacy image URLs accessible; actual synthetic direct/presigned uploads verified |
+| Known migrated-user password | Verified successfully using private .env credentials; password is not recorded here |
 | Production origin mapping | Existing README documents CloudFront; current production configuration must be verified before cutover |
 
-No AWS deployment, production import, or real spending alert has been performed. AWS budget notifications use delayed billing data, are not a hard spending cap, and do not guarantee immediate alerts at a dollar boundary. The configured thresholds cover $1 through the agreed $5 budget. Configure additional thresholds if the budget changes. The budget is account-wide, so it includes AWS services beyond this project. See [AWS budget notification behavior](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html).
+Phase 2 has restored the supplied backup records into isolated local rehearsal tables; the API's dev tables were not changed. No production deployment/import or real spending alert has been performed. Phase 3 deployed temporary synthetic AWS test resources and removed them after testing. AWS budget notifications use delayed billing data, are not a hard spending cap, and do not guarantee immediate alerts at a dollar boundary. The configured thresholds cover $1 through the agreed $5 budget. Configure additional thresholds if the budget changes. The budget is account-wide, so it includes AWS services beyond this project. See [AWS budget notification behavior](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html).
 
 ## Preserved inputs
 
@@ -50,4 +50,24 @@ Post list search remains a literal case-insensitive substring match over tags. S
 
 ## Remaining phase 0 operations
 
-Keep these open until the owner supplies or verifies the external inputs: independent off-device backup, recovery-point acceptance, AWS account/Region, image-bucket access, and known-user login availability. Local implementation can proceed without them; production recovery cannot be represented as verified yet.
+Keep these open until the owner supplies or verifies the external inputs: independent off-device backup and recovery-point acceptance; confirm production mapping and budget again before cutover. Local implementation can proceed without them; production recovery cannot be represented as verified yet.
+
+## Phase 2 verification
+
+The importer, validator, and canonical verifier are implemented. All 1,493 records passed preflight and consistent-read verification in local stage `rehearsal-1793143176918`. A controlled stop after 37 imports resumed with 1,456 imports/37 matches; subsequent runs imported zero records and matched all 1,493. Separate fixture tables proved edited records and unexpected jobs are refused without overwrites. The public CLI import/verify commands were also exercised successfully.
+
+The full suite now passes **54 tests**, including 23 migration tests; typecheck and Serverless packaging pass. The [Phase 2 runbook](phase2-migration-runbook.md) records the import rules and private report locations. Explicit null section fields and 1,343 empty historical comment titles are preserved rather than converted to new-record defaults. These compatibility rules do not loosen API request validation.
+
+The verified local tables are retained in the in-memory database for inspection and later acceptance tests. They disappear if DynamoDB Local stops; the unchanged source files and private manifests remain on disk. No recovery-point acceptance or AWS/image/password prerequisite is implied by this local rehearsal.
+
+## Phase 3 acceptance
+
+The [Phase 3 testing guide](phase3-testing-guide.md) provides repeatable local, image-audit, AWS-smoke and release-check commands. Regression tests passed 83 cases, and the temporary MongoDB reference passed 32 search/sort comparisons. Restored-data HTTP acceptance checks all imported records, public contracts, auth/error boundaries, concurrency, asynchronous local workers, and logs for leaked credentials.
+
+The owner approved the read-only backup-derived image audit; all 1,123 URLs were accessible. Real AWS tests passed using synthetic data in account 523185248252/us-east-1, unique S3 prefixes, and temporary stacks. Direct/presigned uploads and asynchronous Lambda dispatch were exercised with paid AI disabled. Both the initial diagnostic resources and successful test resources were cleaned up; independent inventory checks found no remaining temporary stacks/tables/Lambdas.
+
+Phase 3 fixed missing-target uploads causing S3 side effects and presigned uploads omitting the public-read ACL used by direct uploads. Packaging excludes all migration inputs, local binaries, reports and development-only reference fixtures. Existing production APIs have not been redeployed.
+
+Measured local list p95 was approximately 0.52 seconds at concurrency four. Each full catalog scan consumed approximately 770 strong-read units. The owner updated the expected traffic to fewer than 1 list request/minute; using 1 as a conservative upper bound averages 12.83 RCU. The proposed post-table read allocation was increased from 10 to 15 RCU (22 read/22 write total across all five tables), without deploying changes. Other reads and burst latency are not covered by that estimate, and actual account billing still requires monitoring.
+
+The owner updated the private test password and the real backed-up-user login passed. The test verified the original user ID/role, rejected an invalid password with 401, and found no password/hash/token leakage. All seven test:release-gates checks now pass with exit code 0. Backup password hashes were not modified. Phase 3 automated acceptance is complete; production cutover remains a separate phase with the manual recovery prerequisites still open.

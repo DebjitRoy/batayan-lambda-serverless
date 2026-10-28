@@ -1,6 +1,6 @@
 # MongoDB backup to DynamoDB migration plan
 
-Prepared: 27 October 2026. Updated after local phase 0/1 implementation. DynamoDB API code and infrastructure definitions are implemented; no backup import or AWS deployment has been performed. See `recovery-record.md` for verification and pending operational inputs.
+Prepared: 27 October 2026. Updated after local phase 0/1 implementation. DynamoDB API code and infrastructure definitions are implemented; no AWS backup import or production deployment has been performed. Phase 3 used temporary synthetic AWS resources, now removed. See `recovery-record.md` for verification and pending operational inputs.
 
 ## 1. Recommended approach
 
@@ -63,12 +63,12 @@ Suggested initial provisioned capacity, subject to staging measurement:
 
 | Table | RCU | WCU |
 | --- | ---: | ---: |
-| Posts | 10 | 15 |
+| Posts | 15 | 15 |
 | Comments | 2 | 2 |
 | Users | 1 | 1 |
 | Series | 1 | 1 |
 | Jobs | 3 | 3 |
-| Total per deployed stage | 17 | 22 |
+| Total per deployed stage | 22 | 22 |
 
 AWS currently lists a DynamoDB allowance of 25 GB of Standard storage and 25 provisioned RCUs plus 25 provisioned WCUs. On-demand request charges have a different billing model. Check eligibility and existing usage in the payer account and selected Region; include other tables, indexes, and concurrent stages in the allowance calculation. [AWS DynamoDB pricing](https://aws.amazon.com/dynamodb/pricing/)
 
@@ -165,24 +165,28 @@ Success: all routes and the worker run with `MONGODB_URI` unset, table names/per
 
 ### Phase 2 — Build and rehearse the importer
 
-- [ ] Add `scripts/migrate-mongodb-to-dynamodb.ts` with `validate`, `import`, and `verify` modes; explicit account/Region/stage, source directory, and output manifest arguments. Validate target identity before writes.
-- [ ] Run validation without AWS writes; require 145 posts, 1,344 comments, 4 users, and zero unresolved rejects.
-- [ ] Import users, then posts, then comments into a clean local/staging target. Leave series/jobs empty. Rate-limit by item size and table capacity, not just item count; retry throttles with bounded exponential backoff and jitter.
-- [ ] Interrupt/resume the run and rerun it fully. Prove matching records are skipped, mismatches fail, and no AI workers/S3 uploads are invoked.
-- [ ] Verify all 1,493 records by canonical field comparison and per-record hashes, not merely approximate DynamoDB table `ItemCount`. Verify comment relationships, all section IDs/order, dates, counters, hashes, and image references. Use consistent reads while writers are stopped.
+- [x] Add `scripts/migrate-mongodb-to-dynamodb.ts` with `validate`, `import`, and `verify` modes; explicit account/Region/stage, source directory, and output manifest arguments. Validate target identity before writes.
+- [x] Run validation without AWS writes; require 145 posts, 1,344 comments, 4 users, and zero unresolved rejects.
+- [x] Import users, then posts, then comments into a clean local/staging target. Leave series/jobs empty. Rate-limit by item size and table capacity, not just item count; retry throttles with bounded exponential backoff and jitter.
+- [x] Interrupt/resume the run and rerun it fully. Prove matching records are skipped, mismatches fail, and no AI workers/S3 uploads are invoked.
+- [x] Verify all 1,493 records by canonical field comparison and per-record hashes, not merely approximate DynamoDB table `ItemCount`. Verify comment relationships, all section IDs/order, dates, counters, hashes, and image references. Use consistent reads while writers are stopped.
+
+Completed locally: all 1,493 records verified in isolated stage `rehearsal-1793143176918`; interruption/resume, no-write rerun, conflict refusal, and extra-record refusal passed. See `phase2-migration-runbook.md` for commands and report locations. No AWS import was performed.
 
 Success: two runs produce identical canonical data and an auditable manifest with zero omissions or conflicts. Confirm no extra records exist in the isolated target.
 
 ### Phase 3 — Automated and end-to-end verification
 
-- [ ] Unit-test Extended JSON conversions, defaults, legacy roles, Unicode preservation, item-size calculations, duplicate/orphan rejection, serializers, ID handling, retry/resume behavior, and conflict handling.
-- [ ] Retain and adapt existing Vitest tests; add handler/contract tests for every row in the API matrix, including status/error bodies and auth boundaries.
-- [ ] Run HTTP integration tests against Serverless Offline with DynamoDB Local, using Vitest/fetch or equivalent. Test >1 MB post scans, paginated comment queries, list totals/page boundaries, literal search punctuation/case/Bengali text, all sort orders, status filters, and expanded series lists.
-- [ ] Test concurrent visit increments, duplicate registration, series part reservations/moves/deletion, post/section edits, and duplicate worker delivery. Confirm no lost updates and no phantom upserts.
-- [ ] Test direct and presigned image uploads using an isolated S3 test prefix/bucket; confirm legacy image paths still resolve. Record missing objects rather than rewriting references blindly.
-- [ ] Exercise summary and grammar create/poll/worker success and failure with OpenAI mocked; perform one explicitly budgeted AWS staging smoke test for Lambda async invocation, IAM, S3, and DynamoDB behavior.
-- [ ] Confirm login with a known migrated user's password, invalid-password 401, unchanged public user ID/role, and absence of hashes in responses/logs. A hash prefix alone is insufficient evidence.
-- [ ] Run `npm test`, `npm run typecheck`, and `npm run build`. Measure representative list/detail concurrency and capacity; record pass/fail against the agreed latency and budget targets.
+- [x] Unit-test Extended JSON conversions, defaults, legacy roles, Unicode preservation, item-size calculations, duplicate/orphan rejection, serializers, ID handling, retry/resume behavior, and conflict handling.
+- [x] Retain and adapt existing Vitest tests; add handler/contract tests for every row in the API matrix, including status/error bodies and auth boundaries.
+- [x] Run HTTP integration tests against Serverless Offline with DynamoDB Local, using Vitest/fetch or equivalent. Test >1 MB post scans, paginated comment queries, list totals/page boundaries, literal search punctuation/case/Bengali text, all sort orders, status filters, and expanded series lists.
+- [x] Test concurrent visit increments, duplicate registration, series part reservations/moves/deletion, post/section edits, and duplicate worker delivery. Confirm no lost updates and no phantom upserts.
+- [x] Test direct and presigned image uploads using an isolated S3 test prefix/bucket; confirm legacy image paths still resolve. Record missing objects rather than rewriting references blindly.
+- [x] Exercise summary and grammar create/poll/worker success and failure with OpenAI mocked; perform one explicitly budgeted AWS staging smoke test for Lambda async invocation, IAM, S3, and DynamoDB behavior.
+- [x] Confirm login with a known migrated user's password, invalid-password 401, unchanged public user ID/role, and absence of hashes in responses/logs. A hash prefix alone is insufficient evidence.
+- [x] Run `npm test`, `npm run typecheck`, and `npm run build`. Measure representative list/detail concurrency and capacity; record pass/fail against the agreed latency and budget targets.
+
+Local regressions: 83 passed; MongoDB reference comparisons: 32 passed. Restored-data HTTP tests and the real synthetic AWS smoke passed; all 1,123 image URLs were accessible. Typecheck and packaging pass. Local p95 is about 0.52 seconds; 770 scan read units at the updated owner-confirmed upper bound of 1 list/minute average about 12.83 RCU, below the revised 15 post RCU allocation. Full-catalog AWS latency/account costs still require monitoring. The known migrated-user login passed with the owner-updated private credentials; all seven automated release gates pass. Phase 3 automated acceptance is complete, with production cutover and its manual prerequisites remaining separate. See `phase3-testing-guide.md`.
 
 Success: reproducible tests pass, staging parity is demonstrated, and missing images/history and any accepted search differences are recorded before release.
 
@@ -226,4 +230,4 @@ npm run dev
 npm run deploy -- --stage recovery
 ```
 
-Implementation is complete only when the phase gates pass. The outstanding operational inputs are backup freshness acceptance, access to the existing image bucket, a known-user login check, AWS allowance/budget confirmation, and the production origin mapping. None requires reconnecting to the lost MongoDB to begin the implementation.
+Implementation is complete only when the phase gates pass. The outstanding operational inputs are backup freshness acceptance, the independent off-device copy, AWS allowance/budget confirmation, and the production origin mapping. None requires reconnecting to the lost MongoDB to begin the implementation.
